@@ -1,3 +1,6 @@
 https://github.com/OpenChemistry/avogenerators
 https://github.com/OpenChemistry/molecules
 https://github.com/OpenChemistry/crystals
+https://github.com/OpenChemistry/avogadro-i18n
+https://github.com/OpenChemistry/avogadro-cclib
+https://github.com/ghutchis/avogadro-scikit-nano
