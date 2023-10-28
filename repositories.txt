@@ -3,6 +3,7 @@ https://github.com/OpenChemistry/molecules
 https://github.com/OpenChemistry/crystals
 https://github.com/OpenChemistry/avogadro-i18n
 https://github.com/OpenChemistry/avogadro-cclib
+https://github.com/OpenChemistry/avogadro-commands
 https://github.com/ghutchis/avogadro-build-ase
 https://github.com/ghutchis/avogadro-rdkit
 https://github.com/ghutchis/avogadro-genice
