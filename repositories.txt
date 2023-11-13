@@ -11,4 +11,4 @@ https://github.com/ghutchis/avogadro-scikit-nano
 https://github.com/DHRUVJ2003/Peptide_generation_script
 https://github.com/DHRUVJ2003/Glycans_to_SMILES_script
 https://github.com/kbsezginel/nanocar-avogadro
-https://github.com/Dfilono/Molecule-Builder
+https://github.com/Dfilono/TurtleMol
