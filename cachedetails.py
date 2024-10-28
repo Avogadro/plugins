@@ -48,33 +48,48 @@ def getMetaData(repoName):
         repoData['release_version'] = 'N/A'
         repoData['zipball_url'] = apiString + repoName + '/zipball/' + repoData['branch']
 
-    # parse the repo's plugin.json
+    # Parse the repo's plugin.json
     pluginJsonUrl = apiString + repoName + '/contents/plugin.json'
     print(pluginJsonUrl)
     req = addAuth(pluginJsonUrl)
     try:
         response = urllib.request.urlopen(req)
-        data = json.load(response)
-        json_str = json.dumps(data)
-        resp = json.loads(json_str)
-        contentJson = resp['content']
-        contentJson = base64.b64decode(contentJson)
-
-        try:
-            result = json.loads(contentJson)
-            # fix some common errors
-            if 'type' in result:
-                type = result['type']
-            if type == 'input' or type == 'generators':
-                type = 'inputGenerators'
-            elif type == 'formats':
-                type = 'formatScripts'
-            repoData['type'] = type
-
-        except json.decoder.JSONDecodeError:
-            repoData['type'] = 'other'
     except urllib.error.HTTPError:
         repoData['type'] = 'other'
+    else:
+        try:
+            data = json.load(response)
+            json_str = json.dumps(data)
+            resp = json.loads(json_str)
+            contentJson = resp['content']
+            contentJson = base64.b64decode(contentJson)
+            result = json.loads(contentJson)
+        except json.decoder.JSONDecodeError:
+            repoData['type'] = 'other'
+        else:
+            # First get type of plugin, which is only specified in plugin.json
+            # Fix some common naming errors at the same time
+            if 'type' in result:
+                type_corrections = {'input': 'inputGenerators', 'generators': 'inputGenerators', 'formats': 'formatScripts'
+                repoData['type'] = type_corrections.get(result['type'], result['type']) # Defaults to result['type']
+            else:
+                repoData['type'] = 'other'
+            # Update repoData with information specified in plugin.json
+            # For the following, prefer plugin.json as source over repo metadata
+            # Overwrite where applicable
+            for key in ['author', 'description']:
+                if key in result:
+                    repoData[key] = result[key]
+            # Also prefer name from plugin.json, trim avogadro- prefix
+            if 'name' in result:
+                repoData['name'] = remove_prefix(result['name'], 'avogadro-')
+            # For the following, repo metadata takes precedence over plugin.json
+            # e.g. because plugin authors may forget to update the release number
+            # Only add data if not already in repoData
+            for key in ['version']:
+                if key in result:
+                    if key not in repoData:
+                        repoData[key] = result[key]
 
     pluginJson.append(repoData)
     return
