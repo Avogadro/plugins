@@ -29,9 +29,42 @@ def add_auth(url):
     return data_url
 
 
-def fetch_toml(repo: str, path: str, commit: str) -> dict:
+def get_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dict:
+    """Get the metadata of the GitHub repo itself."""
+    repo_metadata = {}
+
+    api_url = f"https://api.github.com/repos/{repo}"
+    req = add_auth(api_url)
+    response = request.urlopen(req)
+    repo_data = json.load(response)
+    repo_metadata["last-update"] = repo_data["updated_at"]
+
+    # Get the date and time of the specific commit provided
+    commit_url = f"https://api.github.com/repos/{repo}/commits/{commit}"
+    req = add_auth(commit_url)
+    response = request.urlopen(req)
+    commit_data = json.load(response)
+    repo_metadata["commit-timestamp"] = commit_data["commit"]["committer"]["date"]
+
+    # Look for the release if provided
+    if release_tag is None:
+        repo_metadata["has-release"] = False
+    else:
+        repo_metadata["has-release"] = True
+        repo_metadata["release-tag"] = release_tag
+        repo_metadata["release-version"] = release_tag.lstrip("v")
+        release_url = f"https://api.github.com/repos/{repo}/releases/tags/{release_tag}"
+        req = add_auth(release_url)
+        response = request.urlopen(req)
+        release_data = json.load(response)
+        # TODO Get the corresponding commit
+
+    return repo_metadata
+
+
+def fetch_toml(repo: str, commit: str, metadata_file: str) -> dict:
     """Get the metadata from the TOML file in the given repository."""
-    plugin_toml_url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={commit}"
+    plugin_toml_url = f"https://api.github.com/repos/{repo}/contents/{metadata_file}?ref={commit}"
     req = add_auth(plugin_toml_url)
     response = request.urlopen(req)
     data = json.load(response)
@@ -41,29 +74,32 @@ def fetch_toml(repo: str, path: str, commit: str) -> dict:
     return toml
 
 
-def extract_metadata(toml: dict, toml_format: str) -> dict:
+def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
     """Extract the necessary metadata from the plugin's metadata."""
     metadata = {}
 
     # Most of the necessary metadata for the index (name, version etc.) are
     # listed under `[project]` in `pyproject.toml` or at the top level otherwise
     if toml_format == "avogadro":
-        project_metadata = toml["project"]
+        project_metadata = toml
         avogadro_metadata = toml
     else:
-        project_metadata = toml
+        project_metadata = toml["project"]
         avogadro_metadata = toml["tool"]["avogadro"]
     
-    for key in ["name", "version", "authors", "license"]:
-        metadata[key] = project_metadata[key]
+    # Required fields in `[project]`/the top level
+    for required_key in ["name", "version", "authors", "license"]:
+        metadata[required_key] = project_metadata[required_key]
 
-    # Description is optional
-    if "description" in project_metadata:
-        metadata["description"] = project_metadata["description"]
-    else:
-        metadata["description"] = ""
+    # Optional fields in `[project]`/the top level
+    metadata["description"] = project_metadata.get("description", "")
+
+    # Required fields in `[tool.avogadro]`/the top level
+    for required_key in ["plugin-type"]:
+        metadata[required_key] = avogadro_metadata[required_key]
     
-    metadata["plugin-type"] = avogadro_metadata["plugin-type"]
+    # Optional fields in `[tool.avogadro]`/the top level
+    metadata["minimum-avogadro-version"] = avogadro_metadata.get("plugin-type", "1.103")
 
     # Also determine and store what features the plugin provides by looking at
     # which arrays the TOML contains
@@ -76,8 +112,18 @@ def check_metadata(metadata: dict):
     """Confirm that various fields in the extracted metadata are the appropriate
     format, type etc. according to the requirements."""
 
+    if not isinstance(metadata["minimum-avogadro-version"], str):
+        raise Exception(f"Minimum Avogadro version number of {metadata["name"]} is not a string!")
+    
     if not isinstance(metadata["version"], str):
         raise Exception(f"Version number of {metadata["name"]} is not a string!")
+    
+    # The version of a release and the version number in the TOML file must match
+    if not metadata["version"] == metadata["release-version"]:
+        raise Exception(f"Version number of {metadata["name"]} does not match the release!")
+    
+    # The commit of a release and the commit given in the TOML file must match
+    # TODO
     
     for c in metadata["name"]:
         # Only a-z, A-Z, 0-9, - are valid in plugin names
@@ -93,7 +139,14 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
     all_metadata = []
 
     for plugin_name, repo_info in repos.items():
-        toml = fetch_toml(repo_info["git"], repo_info["path"], repo_info["commit"])
+        # Take out the repo owner/name string from the git URL
+        repo = repo_info["git"].removeprefix("https://github.com/").removesuffix(".git")
+
+        release_tag = repo_info.get("release-tag", None)
+
+        repo_metadata = get_repo_metadata(repo, repo_info["commit"], release_tag)
+
+        toml = fetch_toml(repo, repo_info["commit"], repo_info["path"])
         toml_filename = repo_info["path"].split("/")[-1]
         if toml_filename == "avogadro.toml":
             toml_format = "avogadro"
@@ -101,8 +154,13 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
             toml_format = "pyproject"
         else:
             raise Exception(f"Metadata file provided by {plugin_name} not a recognized format!")
-        plugin_metadata = extract_metadata(toml, toml_format)
+        toml_metadata = extract_plugin_metadata(toml, toml_format)
+
+        # Combine metadata from all sources
+        plugin_metadata = repo_metadata | toml_metadata
+
         check_metadata(plugin_metadata)
+
         all_metadata.append(plugin_metadata)
     
     return all_metadata
