@@ -170,7 +170,7 @@ if __name__ == "__main__":
     # When run as a script, get the metadata for all the repositories and save
     # as a JSON file in the current working directory
     repos_file = Path(__file__).with_name("repositories.toml")
-    with open(repos_file, "b") as f:
+    with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
     metadata = get_metadata_all(repos)
     with open(Path.cwd()/"plugins.json", "w", encoding="utf-8") as f:
