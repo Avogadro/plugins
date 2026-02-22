@@ -1,12 +1,16 @@
 [pypkg-demo]
-git = "https://github.com/matterhorn103/avo-plugin-demo.git"
+git.repo = "https://github.com/matterhorn103/avo-plugin-demo.git"
+git.commit = "dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5"
+src.url = "https://github.com/matterhorn103/avo-plugin-demo/archive/dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5.zip"
+src.sha256 = "e317a02f4842c50d075f321a7d669a78ab502b15e907d2fdb847eff916a1aac8"
 path = "pypkg-demo"
 metadata = "pyproject.toml"
-commit = "dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5"
 plugin-type = "pypkg"
 
 [avogenerators]
-git = "https://github.com/OpenChemistry/avogenerators.git"
+git.repo = "https://github.com/OpenChemistry/avogenerators.git"
+git.commit = "9843e35d4009040847dab2f49cd108a1c5391e0a"
+src.url = "https://github.com/OpenChemistry/avogenerators/archive/9843e35d4009040847dab2f49cd108a1c5391e0a.zip"
+src.sha256 = "3385ecfda1f84b7ddffa73d56810d772696a9428b0d86e7344ed6b1aa5197daa"
 metadata = "pyproject.toml"
-commit = "9843e35d4009040847dab2f49cd108a1c5391e0a"
 plugin-type = "pypkg"

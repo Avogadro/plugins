@@ -30,7 +30,7 @@ def add_auth(url):
     return data_url
 
 
-def get_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dict:
+def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dict:
     """Get the metadata of the GitHub repo itself."""
     repo_metadata = {}
 
@@ -110,7 +110,7 @@ def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
     return metadata
 
 
-def check_metadata(metadata: dict):
+def validate_metadata(metadata: dict):
     """Confirm that various fields in the extracted metadata are the appropriate
     format, type etc. according to the requirements."""
 
@@ -136,6 +136,32 @@ def check_metadata(metadata: dict):
             continue
         else:
             raise Exception(f"{metadata["name"]} is not a valid plugin name!")
+        
+
+def validate_repo_info(repo_info: dict):
+    """Confirm that the information provided in `repositories.toml` is complete
+    and well-formed."""
+    
+    # Check details of the git repository were provided
+    assert "repo" in repo_info["git"]
+    assert "commit" in repo_info["git"]
+
+    # Check for details of the source archive
+    assert "url" in repo_info["src"]
+    assert "sha256" in repo_info["src"]
+
+    # Confirm presence of other required information
+    for required_key in ["metadata", "plugin-type"]:
+        assert required_key in repo_info
+    
+    # Make sure that any path provided is to a directory, not a file, but with
+    # no final slash, and that backslashes aren't used
+    if "path" in repo_info:
+        path: str = repo_info["path"]
+        assert not path.endswith("/")
+        assert "\\" not in path
+        final_component = path.split("/")
+        assert "." not in final_component
 
 
 def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
@@ -144,16 +170,20 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
     all_metadata = []
 
     for plugin_name, repo_info in repos.items():
-        # Take out the repo owner/name string from the git URL
-        repo = repo_info["git"].removeprefix("https://github.com/").removesuffix(".git")
+        # First just validate the information in `repositories.toml`
+        validate_repo_info(repo_info)
+
+        # Take out the repo owner/name string from the GitHub repo URL
+        repo = repo_info["git"]["repo"].removeprefix("https://github.com/").removesuffix(".git")
+        commit = repo_info["git"]["commit"]
 
         release_tag = repo_info.get("release-tag", None)
 
-        repo_metadata = get_repo_metadata(repo, repo_info["commit"], release_tag)
+        repo_metadata = get_gh_repo_metadata(repo, commit, release_tag)
 
         path = repo_info.get("path")
 
-        toml = fetch_toml(repo, repo_info["commit"], path, repo_info["metadata"])
+        toml = fetch_toml(repo, commit, path, repo_info["metadata"])
         toml_filename = repo_info["metadata"].split("/")[-1]
         if toml_filename == "avogadro.toml":
             toml_format = "avogadro"
@@ -166,7 +196,7 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
         # Combine metadata from all sources, including that in `repositories.toml`
         plugin_metadata = toml_metadata | repo_info | repo_metadata
 
-        check_metadata(plugin_metadata)
+        validate_metadata(plugin_metadata)
 
         all_metadata.append(plugin_metadata)
     
