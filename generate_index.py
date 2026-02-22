@@ -163,8 +163,8 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
             raise Exception(f"Metadata file provided by {plugin_name} not a recognized format!")
         toml_metadata = extract_plugin_metadata(toml, toml_format)
 
-        # Combine metadata from all sources
-        plugin_metadata = repo_metadata | toml_metadata
+        # Combine metadata from all sources, including that in `repositories.toml`
+        plugin_metadata = toml_metadata | repo_info | repo_metadata
 
         check_metadata(plugin_metadata)
 
