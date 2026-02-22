@@ -39,6 +39,7 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
     response = request.urlopen(req)
     repo_data = json.load(response)
     repo_metadata["last-update"] = repo_data["updated_at"]
+    repo_metadata["gh-stars"] = repo_data["stargazers_count"]
 
     # Get the date and time of the specific commit provided
     commit_url = f"https://api.github.com/repos/{repo}/commits/{commit}"
