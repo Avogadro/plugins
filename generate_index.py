@@ -62,9 +62,10 @@ def get_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dict:
     return repo_metadata
 
 
-def fetch_toml(repo: str, commit: str, metadata_file: str) -> dict:
+def fetch_toml(repo: str, commit: str, path: str | None, metadata_file: str) -> dict:
     """Get the metadata from the TOML file in the given repository."""
-    plugin_toml_url = f"https://api.github.com/repos/{repo}/contents/{metadata_file}?ref={commit}"
+    metadata_path = f"{path}/{metadata_file}" if path else metadata_file
+    plugin_toml_url = f"https://api.github.com/repos/{repo}/contents/{metadata_path}?ref={commit}"
     req = add_auth(plugin_toml_url)
     response = request.urlopen(req)
     data = json.load(response)
@@ -146,8 +147,10 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
 
         repo_metadata = get_repo_metadata(repo, repo_info["commit"], release_tag)
 
-        toml = fetch_toml(repo, repo_info["commit"], repo_info["path"])
-        toml_filename = repo_info["path"].split("/")[-1]
+        path = repo_info.get("path")
+
+        toml = fetch_toml(repo, repo_info["commit"], path, repo_info["metadata"])
+        toml_filename = repo_info["metadata"].split("/")[-1]
         if toml_filename == "avogadro.toml":
             toml_format = "avogadro"
         elif toml_filename == "pyproject.toml":
