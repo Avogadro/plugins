@@ -1,5 +1,5 @@
 [pypkg-demo]
 git = "https://github.com/matterhorn103/avo-plugin-demo.git"
 path = "pypkg-demo/pyproject.toml"
-commit = "55358eadd7edbbf0ee809280a0e0457f37a77719"
+commit = "dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5"
 plugin-type = "pypkg"
