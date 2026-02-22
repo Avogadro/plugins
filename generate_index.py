@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 from pathlib import Path
 import tomllib
@@ -70,7 +71,7 @@ def fetch_toml(repo: str, commit: str, path: str | None, metadata_file: str) -> 
     response = request.urlopen(req)
     data = json.load(response)
     content = base64.b64decode(data["content"])
-    toml = tomllib.loads(content)
+    toml = tomllib.load(io.BytesIO(content))
 
     return toml
 
@@ -96,11 +97,11 @@ def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
     metadata["description"] = project_metadata.get("description", "")
 
     # Required fields in `[tool.avogadro]`/the top level
-    for required_key in ["plugin-type"]:
+    for required_key in []:
         metadata[required_key] = avogadro_metadata[required_key]
     
     # Optional fields in `[tool.avogadro]`/the top level
-    metadata["minimum-avogadro-version"] = avogadro_metadata.get("plugin-type", "1.103")
+    metadata["minimum-avogadro-version"] = avogadro_metadata.get("minimum-avogadro-version", "1.103")
 
     # Also determine and store what features the plugin provides by looking at
     # which arrays the TOML contains
@@ -119,12 +120,15 @@ def check_metadata(metadata: dict):
     if not isinstance(metadata["version"], str):
         raise Exception(f"Version number of {metadata["name"]} is not a string!")
     
-    # The version of a release and the version number in the TOML file must match
-    if not metadata["version"] == metadata["release-version"]:
-        raise Exception(f"Version number of {metadata["name"]} does not match the release!")
-    
-    # The commit of a release and the commit given in the TOML file must match
-    # TODO
+    # If the plugin uses release tags, we want to verify that the commit of the
+    # release is the one being uploaded
+    if metadata["has-release"]:
+        # The version in the TOML file must match the release version
+        if not metadata["version"] == metadata["release-version"]:
+            raise Exception(f"Version number of {metadata["name"]} does not match the release!")
+
+        # The commit of a release and the commit given in the TOML file must match
+        # TODO
     
     for c in metadata["name"]:
         # Only a-z, A-Z, 0-9, - are valid in plugin names
@@ -177,4 +181,4 @@ if __name__ == "__main__":
         repos = tomllib.load(f)
     metadata = get_metadata_all(repos)
     with open(Path.cwd()/"plugins.json", "w", encoding="utf-8") as f:
-        plugins_json = json.dump(f, metadata)
+        plugins_json = json.dump(metadata, f)
