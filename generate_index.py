@@ -15,11 +15,11 @@ PLUGIN_TYPES = [
 
 """A list of current plugin feature types."""
 FEATURE_TYPES = [
-    "commands",
-    "charges",
-    "energy",
-    "formats",
-    "generators",
+    "electrostatic-models",
+    "energy-models",
+    "file-formats",
+    "input-generators",
+    "menu-commands",
 ]
 
 
