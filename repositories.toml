@@ -3,3 +3,8 @@ git = "https://github.com/matterhorn103/avo-plugin-demo.git"
 path = "pypkg-demo/pyproject.toml"
 commit = "dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5"
 plugin-type = "pypkg"
+
+[avogenerators]
+git = "https://github.com/OpenChemistry/avogenerators.git"
+commit = "9843e35d4009040847dab2f49cd108a1c5391e0a"
+plugin-type = "pypkg"
