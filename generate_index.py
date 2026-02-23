@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -150,6 +151,13 @@ def validate_repo_info(repo_info: dict):
     # Check for details of the source archive
     assert "url" in repo_info["src"]
     assert "sha256" in repo_info["src"]
+    # Confirm the hash is correct
+    req = request.Request(repo_info["src"]["url"])
+    response = request.urlopen(req)
+    src_hash = hashlib.sha256()
+    while chunk := response.read(8192):
+       src_hash.update(chunk)
+    assert src_hash.hexdigest() == repo_info["src"]["sha256"]
 
     # Confirm presence of other required information
     for required_key in ["metadata", "plugin-type"]:
