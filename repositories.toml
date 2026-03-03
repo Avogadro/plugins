@@ -1,0 +1,12 @@
+[pypkg-demo]
+git.repo = "https://github.com/matterhorn103/avo-plugin-demo.git"
+git.commit = "dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5"
+path = "pypkg-demo"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
+
+[avogenerators]
+git.repo = "https://github.com/OpenChemistry/avogenerators.git"
+git.commit = "143a06f3fc053a886fd47ab9d08f583997a4f009"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"

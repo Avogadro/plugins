@@ -70,7 +70,7 @@ def getMetaData(repoName):
             # First get type of plugin, which is only specified in plugin.json
             # Fix some common naming errors at the same time
             if 'type' in result:
-                type_corrections = {'input': 'inputGenerators', 'generators': 'inputGenerators', 'formats': 'formatScripts'
+                type_corrections = {'input': 'inputGenerators', 'generators': 'inputGenerators', 'formats': 'formatScripts'}
                 repoData['type'] = type_corrections.get(result['type'], result['type']) # Defaults to result['type']
             else:
                 repoData['type'] = 'other'
