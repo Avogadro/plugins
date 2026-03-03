@@ -218,3 +218,7 @@ __marimo__/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Output of the indexing scripts
+plugins.json
+plugins2.json

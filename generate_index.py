@@ -93,6 +93,7 @@ def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
     
     # Required fields in `[project]`/the top level
     for required_key in ["name", "version", "authors", "license"]:
+        # Just check that the authors field is present
         metadata[required_key] = project_metadata[required_key]
 
     # Optional fields in `[project]`/the top level
@@ -219,5 +220,5 @@ if __name__ == "__main__":
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
     metadata = get_metadata_all(repos)
-    with open(Path.cwd()/"plugins.json", "w", encoding="utf-8") as f:
+    with open(Path.cwd()/"plugins2.json", "w", encoding="utf-8") as f:
         plugins_json = json.dump(metadata, f)
