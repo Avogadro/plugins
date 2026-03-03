@@ -105,7 +105,11 @@ def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
     
     # Required fields in `[project]`/the top level
     for required_key in ["name", "version", "authors", "license"]:
-        # Just check that the authors field is present
+        # Only want authors' names, not emails
+        if required_key == "authors":
+            authors = [author["name"] for author in project_metadata["authors"] if "name" in author]
+            metadata["authors"] = authors
+            continue
         metadata[required_key] = project_metadata[required_key]
 
     # Optional fields in `[project]`/the top level
