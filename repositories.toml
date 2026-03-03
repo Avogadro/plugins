@@ -5,8 +5,32 @@ path = "pypkg-demo"
 metadata = "pyproject.toml"
 plugin-type = "pypkg"
 
-[avogenerators]
+[generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
 git.commit = "143a06f3fc053a886fd47ab9d08f583997a4f009"
 metadata = "pyproject.toml"
 plugin-type = "pypkg"
+
+[rdkit]
+git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
+git.commit = "fa16c1967eb8e6dc522da1a07faaae03f7dc9297"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
+
+[cclib]
+git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
+git.commit = "69927f5a7ed158bafe333305bd5c5fe4afb6134c"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
+
+[build-ase]
+git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
+git.commit = "c2668c85fa02b69162316fb1baeb378916c5ac4e"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
+
+[xtb-energy]
+git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
+git.commit = "099a07072a92fa821aeefe621ddcbcbef888dcd2"
+metadata = "pyproject.toml"
+plugin-type = "pypixi"

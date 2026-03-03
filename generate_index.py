@@ -160,10 +160,10 @@ def validate_metadata(metadata: dict):
     format, type etc. according to the requirements."""
 
     if not isinstance(metadata["minimum-avogadro-version"], str):
-        raise Exception(f"Minimum Avogadro version number of {metadata["name"]} is not a string!")
+        raise Exception(f"Minimum Avogadro version number of {metadata['name']} is not a string!")
     
     if not isinstance(metadata["version"], str):
-        raise Exception(f"Version number of {metadata["name"]} is not a string!")
+        raise Exception(f"Version number of {metadata['name']} is not a string!")
     
     # For now, Avogadro does not support fetching arbitrary Git repos with git
     # The plugin downloader requires the source URL and hash to function
@@ -175,7 +175,7 @@ def validate_metadata(metadata: dict):
     if metadata["has-release"]:
         # The version in the TOML file must match the release version
         if not metadata["version"] == metadata["release-version"]:
-            raise Exception(f"Version number of {metadata["name"]} does not match the release!")
+            raise Exception(f"Version number of {metadata['name']} does not match the release!")
 
         # The commit of a release and the commit given in the TOML file must match
         # TODO
@@ -185,7 +185,7 @@ def validate_metadata(metadata: dict):
         if c.isascii() and (c.isalnum() or c == "-"):
             continue
         else:
-            raise Exception(f"{metadata["name"]} is not a valid plugin name!")
+            raise Exception(f"{metadata['name']} is not a valid plugin name!")
 
 
 def tidy_metadata(metadata: dict) -> dict:
