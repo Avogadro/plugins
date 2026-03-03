@@ -54,8 +54,17 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
     repo_metadata["last-update"] = repo_data["updated_at"]
     repo_metadata["gh-stars"] = repo_data["stargazers_count"]
 
+    # Get the public URL of the repo's README
+    # (we'll check this is the same as the plugin's README later)
+    readme_url = f"{api_url}/readme"
+    readme_data = requests.get(readme_url).json()
+    repo_metadata["gh-readme"] = {
+        "url": readme_data["html_url"],
+        "path": readme_data["path"],
+    }
+
     # Get the date and time of the specific commit provided
-    commit_url = f"https://api.github.com/repos/{repo}/commits/{commit}"
+    commit_url = f"{api_url}/commits/{commit}"
     req = add_auth(commit_url)
     response = request.urlopen(req)
     commit_data = json.load(response)
@@ -68,7 +77,7 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
         repo_metadata["has-release"] = True
         repo_metadata["release-tag"] = release_tag
         repo_metadata["release-version"] = release_tag.lstrip("v")
-        release_url = f"https://api.github.com/repos/{repo}/releases/tags/{release_tag}"
+        release_url = f"{api_url}/releases/tags/{release_tag}"
         req = add_auth(release_url)
         response = request.urlopen(req)
         _release_data = json.load(response)
@@ -77,7 +86,7 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
     return repo_metadata
 
 
-def fetch_toml(repo: str, commit: str, path: str | None, metadata_file: str) -> dict:
+def fetch_gh_toml(repo: str, commit: str, path: str | None, metadata_file: str) -> dict:
     """Get the metadata from the TOML file in the given repository."""
     metadata_path = f"{path}/{metadata_file}" if path else metadata_file
     plugin_toml_url = f"https://api.github.com/repos/{repo}/contents/{metadata_path}?ref={commit}"
@@ -90,7 +99,7 @@ def fetch_toml(repo: str, commit: str, path: str | None, metadata_file: str) -> 
     return toml
 
 
-def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
+def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
     """Extract the necessary metadata from the plugin's metadata."""
     metadata = {}
 
@@ -114,6 +123,7 @@ def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
 
     # Optional fields in `[project]`/the top level
     metadata["description"] = project_metadata.get("description", "")
+    metadata["readme"] = project_metadata.get("readme", None)
 
     # Required fields in `[tool.avogadro]`/the top level
     for required_key in []:
@@ -127,6 +137,38 @@ def extract_plugin_metadata(toml: dict, toml_format: str) -> dict:
     metadata["feature-types"] = [t for t in FEATURE_TYPES if t in avogadro_metadata]
 
     return metadata
+            
+
+def validate_repo_info(repo_info: dict):
+    """Confirm that the information provided in `repositories.toml` is complete
+    and well-formed."""
+
+    git_info = repo_info.get("git")
+    src_info = repo_info.get("src")
+    # Make sure either the git repository or a source archive were provided
+    assert git_info or src_info
+    
+    if git_info:
+        # Check details of the git repository were provided
+        assert "repo" in git_info
+        assert "commit" in git_info
+    else:
+        # Check for details of the source archive
+        assert "url" in src_info
+        assert "sha256" in src_info
+
+    # Confirm presence of other required information
+    for required_key in ["metadata", "plugin-type"]:
+        assert required_key in repo_info
+    
+    # Make sure that any path provided is to a directory, not a file, but with
+    # no final slash, and that backslashes aren't used
+    if "path" in repo_info:
+        path: str = repo_info["path"]
+        assert not path.endswith("/")
+        assert "\\" not in path
+        final_component = path.split("/")
+        assert "." not in final_component
 
 
 def validate_metadata(metadata: dict):
@@ -160,38 +202,23 @@ def validate_metadata(metadata: dict):
             continue
         else:
             raise Exception(f"{metadata["name"]} is not a valid plugin name!")
-        
 
-def validate_repo_info(repo_info: dict):
-    """Confirm that the information provided in `repositories.toml` is complete
-    and well-formed."""
 
-    git_info = repo_info.get("git")
-    src_info = repo_info.get("src")
-    # Make sure either the git repository or a source archive were provided
-    assert git_info or src_info
+def tidy_metadata(metadata: dict) -> dict:
+    """Do any final tidying up of the metadata.
     
-    if git_info:
-        # Check details of the git repository were provided
-        assert "repo" in git_info
-        assert "commit" in git_info
-    else:
-        # Check for details of the source archive
-        assert "url" in src_info
-        assert "sha256" in src_info
-
-    # Confirm presence of other required information
-    for required_key in ["metadata", "plugin-type"]:
-        assert required_key in repo_info
+    This changes the input `dict`."""
+    # Check that any GitHub README found is also the plugin's README
+    # If not, ditch the URL
+    # Though if the URL was provided in repositories.toml, we don't overwrite it
+    if metadata["gh-readme"] and not metadata.get("readme-url"):
+        gh_readme = metadata.pop("gh-readme")
+        if gh_readme["path"] == metadata["readme"]:
+            metadata["readme-url"] = gh_readme["url"]
+        else:
+            metadata["readme-url"] = None
     
-    # Make sure that any path provided is to a directory, not a file, but with
-    # no final slash, and that backslashes aren't used
-    if "path" in repo_info:
-        path: str = repo_info["path"]
-        assert not path.endswith("/")
-        assert "\\" not in path
-        final_component = path.split("/")
-        assert "." not in final_component
+    return metadata
 
 
 def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
@@ -232,8 +259,8 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
             repo_info["src"] = {"url": src_url, "sha256": src_sha256}
 
             path = repo_info.get("path")
-            toml = fetch_toml(repo, commit, path, repo_info["metadata"])
-            toml_metadata = extract_plugin_metadata(toml, toml_format)
+            toml = fetch_gh_toml(repo, commit, path, repo_info["metadata"])
+            toml_metadata = extract_toml_metadata(toml, toml_format)
 
             release_tag = repo_info.get("release-tag", None)
             repo_metadata = get_gh_repo_metadata(repo, commit, release_tag)
@@ -268,15 +295,16 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
                         toml_file: Path = next(src.iterdir())/path/toml_filename
                     with open(toml_file, "rb") as f:
                         toml = tomllib.load(f)
-                    toml_metadata = extract_plugin_metadata(toml, toml_format)
+                    toml_metadata = extract_toml_metadata(toml, toml_format)
 
             # There is no repo metadata to look at, so just set defaults
-            repo_metadata = {"has-release": False}
+            repo_metadata = {"has-release": False, "readme-url": None}
 
         # Combine metadata from all sources, including that in `repositories.toml`
         plugin_metadata = toml_metadata | repo_info | repo_metadata
 
         validate_metadata(plugin_metadata)
+        plugin_metadata = tidy_metadata(plugin_metadata)
 
         all_metadata.append(plugin_metadata)
     
@@ -296,4 +324,4 @@ if __name__ == "__main__":
         print(json.dumps(metadata, indent=indent))
     else:
         with open(Path.cwd()/"plugins2.json", "w", encoding="utf-8") as f:
-            plugins_json = json.dump(metadata, f)
+            plugins_json = json.dump(metadata, f, indent=indent)
