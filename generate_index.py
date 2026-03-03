@@ -1,10 +1,22 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "requests>=2.32.5",
+# ]
+# ///
+
 import base64
 import hashlib
 import io
 import json
-from pathlib import Path
+import shutil
+import sys
+import tempfile
 import tomllib
+from pathlib import Path
 from urllib import request
+
+import requests
 
 
 """A list of current plugin types."""
@@ -59,7 +71,7 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
         release_url = f"https://api.github.com/repos/{repo}/releases/tags/{release_tag}"
         req = add_auth(release_url)
         response = request.urlopen(req)
-        release_data = json.load(response)
+        _release_data = json.load(response)
         # TODO Get the corresponding commit
 
     return repo_metadata
@@ -123,6 +135,11 @@ def validate_metadata(metadata: dict):
     if not isinstance(metadata["version"], str):
         raise Exception(f"Version number of {metadata["name"]} is not a string!")
     
+    # For now, Avogadro does not support fetching arbitrary Git repos with git
+    # The plugin downloader requires the source URL and hash to function
+    assert "url" in metadata["src"]
+    assert "sha256" in metadata["src"]
+    
     # If the plugin uses release tags, we want to verify that the commit of the
     # release is the one being uploaded
     if metadata["has-release"]:
@@ -144,21 +161,20 @@ def validate_metadata(metadata: dict):
 def validate_repo_info(repo_info: dict):
     """Confirm that the information provided in `repositories.toml` is complete
     and well-formed."""
-    
-    # Check details of the git repository were provided
-    assert "repo" in repo_info["git"]
-    assert "commit" in repo_info["git"]
 
-    # Check for details of the source archive
-    assert "url" in repo_info["src"]
-    assert "sha256" in repo_info["src"]
-    # Confirm the hash is correct
-    req = request.Request(repo_info["src"]["url"])
-    response = request.urlopen(req)
-    src_hash = hashlib.sha256()
-    while chunk := response.read(8192):
-       src_hash.update(chunk)
-    assert src_hash.hexdigest() == repo_info["src"]["sha256"]
+    git_info = repo_info.get("git")
+    src_info = repo_info.get("src")
+    # Make sure either the git repository or a source archive were provided
+    assert git_info or src_info
+    
+    if git_info:
+        # Check details of the git repository were provided
+        assert "repo" in git_info
+        assert "commit" in git_info
+    else:
+        # Check for details of the source archive
+        assert "url" in src_info
+        assert "sha256" in src_info
 
     # Confirm presence of other required information
     for required_key in ["metadata", "plugin-type"]:
@@ -183,17 +199,6 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
         # First just validate the information in `repositories.toml`
         validate_repo_info(repo_info)
 
-        # Take out the repo owner/name string from the GitHub repo URL
-        repo = repo_info["git"]["repo"].removeprefix("https://github.com/").removesuffix(".git")
-        commit = repo_info["git"]["commit"]
-
-        release_tag = repo_info.get("release-tag", None)
-
-        repo_metadata = get_gh_repo_metadata(repo, commit, release_tag)
-
-        path = repo_info.get("path")
-
-        toml = fetch_toml(repo, commit, path, repo_info["metadata"])
         toml_filename = repo_info["metadata"].split("/")[-1]
         if toml_filename == "avogadro.toml":
             toml_format = "avogadro"
@@ -201,7 +206,68 @@ def get_metadata_all(repos: dict[str, dict]) -> dict[str, dict]:
             toml_format = "pyproject"
         else:
             raise Exception(f"Metadata file provided by {plugin_name} not a recognized format!")
-        toml_metadata = extract_plugin_metadata(toml, toml_format)
+        
+        if "git" in repo_info:
+            # Git repo, which for now means it will always be a GitHub repo
+            # (support for GitLab and arbitrary repos is hopefully to come)
+            repo_url = repo_info["git"]["repo"].removesuffix(".git")
+            repo = repo_url.removeprefix("https://github.com/")
+            commit = repo_info["git"]["commit"]
+
+            # Automatically generate the source archive details for Avogadro
+            src_url = f"{repo_url}/archive/{commit}.zip"
+            # Work out the hash
+            r = requests.get(src_url, stream=True)
+            with tempfile.TemporaryFile() as tmp:
+                src_hash = hashlib.sha256()
+                for chunk in r.iter_content(chunk_size=8192):
+                    tmp.write(chunk)
+                    src_hash.update(chunk)
+                tmp.close()
+                src_sha256= src_hash.hexdigest()
+            repo_info["src"] = {"url": src_url, "sha256": src_sha256}
+
+            path = repo_info.get("path")
+            toml = fetch_toml(repo, commit, path, repo_info["metadata"])
+            toml_metadata = extract_plugin_metadata(toml, toml_format)
+
+            release_tag = repo_info.get("release-tag", None)
+            repo_metadata = get_gh_repo_metadata(repo, commit, release_tag)
+        else:
+            # Arbitrary source code archive
+            src_info = repo_info["src"]
+            r = requests.get(src_info["url"], stream=True)
+            with tempfile.NamedTemporaryFile(delete_on_close=False) as tmp:
+                src_hash = hashlib.sha256()
+                for chunk in r.iter_content(chunk_size=8192):
+                    tmp.write(chunk)
+                    src_hash.update(chunk)
+                tmp.close()
+                # First confirm the hash is correct
+                assert src_hash.hexdigest() == src_info["sha256"]
+                # Extract the archive's contents
+                # We don't know the format, so try all in turn
+                with tempfile.TemporaryDirectory() as d:
+                    src = Path(d)
+                    for fmt in ["zip", "tar", "gztar", "bztar", "xztar"]:
+                        try:
+                            shutil.unpack_archive(tmp.name, src, fmt)
+                            # Stop once we extract successfully
+                            break
+                        except shutil.ReadError:
+                            continue
+                    path = repo_info.get("path")
+                    if len(list(src.iterdir())) > 1:
+                        toml_file: Path = src/path/toml_filename
+                    else:
+                        # Archive was presumably nested
+                        toml_file: Path = next(src.iterdir())/path/toml_filename
+                    with open(toml_file, "rb") as f:
+                        toml = tomllib.load(f)
+                    toml_metadata = extract_plugin_metadata(toml, toml_format)
+
+            # There is no repo metadata to look at, so just set defaults
+            repo_metadata = {"has-release": False}
 
         # Combine metadata from all sources, including that in `repositories.toml`
         plugin_metadata = toml_metadata | repo_info | repo_metadata
@@ -220,5 +286,10 @@ if __name__ == "__main__":
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
     metadata = get_metadata_all(repos)
-    with open(Path.cwd()/"plugins2.json", "w", encoding="utf-8") as f:
-        plugins_json = json.dump(metadata, f)
+    args = sys.argv
+    indent = 2 if "--pretty" in args else None
+    if "--show" in args:
+        print(json.dumps(metadata, indent=indent))
+    else:
+        with open(Path.cwd()/"plugins2.json", "w", encoding="utf-8") as f:
+            plugins_json = json.dump(metadata, f)
