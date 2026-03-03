@@ -7,6 +7,6 @@ plugin-type = "pypkg"
 
 [avogenerators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
-git.commit = "9843e35d4009040847dab2f49cd108a1c5391e0a"
+git.commit = "143a06f3fc053a886fd47ab9d08f583997a4f009"
 metadata = "pyproject.toml"
 plugin-type = "pypkg"
