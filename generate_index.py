@@ -14,7 +14,6 @@ import sys
 import tempfile
 import tomllib
 from pathlib import Path
-from urllib import request
 
 import requests
 
@@ -36,21 +35,12 @@ FEATURE_TYPES = [
 ]
 
 
-def add_auth(url):
-    data_url = request.Request(url)
-    base64_string = 'ZXRwMTI6cXdlcnR5Njc='
-    data_url.add_header("Authorization", f"Basic {base64_string}")
-    return data_url
-
-
 def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dict:
     """Get the metadata of the GitHub repo itself."""
     repo_metadata = {}
 
     api_url = f"https://api.github.com/repos/{repo}"
-    req = add_auth(api_url)
-    response = request.urlopen(req)
-    repo_data = json.load(response)
+    repo_data = requests.get(api_url).json()
     repo_metadata["last-update"] = repo_data["updated_at"]
     repo_metadata["gh-stars"] = repo_data["stargazers_count"]
 
@@ -65,9 +55,7 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
 
     # Get the date and time of the specific commit provided
     commit_url = f"{api_url}/commits/{commit}"
-    req = add_auth(commit_url)
-    response = request.urlopen(req)
-    commit_data = json.load(response)
+    commit_data = requests.get(commit_url).json()
     repo_metadata["commit-timestamp"] = commit_data["commit"]["committer"]["date"]
 
     # Look for the release if provided
@@ -77,10 +65,8 @@ def get_gh_repo_metadata(repo: str, commit: str, release_tag: str | None) -> dic
         repo_metadata["has-release"] = True
         repo_metadata["release-tag"] = release_tag
         repo_metadata["release-version"] = release_tag.lstrip("v")
-        release_url = f"{api_url}/releases/tags/{release_tag}"
-        req = add_auth(release_url)
-        response = request.urlopen(req)
-        _release_data = json.load(response)
+        #release_url = f"{api_url}/releases/tags/{release_tag}"
+        #release_data = requests.get(release_url).json()
         # TODO Get the corresponding commit
 
     return repo_metadata
@@ -90,9 +76,7 @@ def fetch_gh_toml(repo: str, commit: str, path: str | None, metadata_file: str) 
     """Get the metadata from the TOML file in the given repository."""
     metadata_path = f"{path}/{metadata_file}" if path else metadata_file
     plugin_toml_url = f"https://api.github.com/repos/{repo}/contents/{metadata_path}?ref={commit}"
-    req = add_auth(plugin_toml_url)
-    response = request.urlopen(req)
-    data = json.load(response)
+    data = requests.get(plugin_toml_url).json()
     content = base64.b64decode(data["content"])
     toml = tomllib.load(io.BytesIO(content))
 
