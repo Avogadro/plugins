@@ -112,6 +112,11 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
     # which arrays the TOML contains
     metadata["feature-types"] = [t for t in FEATURE_TYPES if t in avogadro_metadata]
 
+    # If the plugin is a Python package, get the entry point
+    # It doesn't go into the index, but we want to validate it
+    if "scripts" in project_metadata:
+        metadata["scripts"] = project_metadata["scripts"]
+
     return metadata
 
 
@@ -182,6 +187,14 @@ def validate_metadata(metadata: dict):
     # Plugin name must begin with `avogadro-`
     if not name.startswith("avogadro-"):
         raise Exception(f"{name} is not a valid plugin name (missing prefix)!")
+    
+    # Python packages must have a correctly defined entry point
+    if metadata["plugin-type"] in ["pypkg", "pypixi"]:
+        scripts = metadata.get("scripts")
+        if scripts and metadata["name"] in scripts:
+            pass
+        else:
+            raise Exception(f"{metadata['name']} does not define an entry point that is the same as the plugin name!")
 
 
 def tidy_metadata(metadata: dict) -> dict:
@@ -194,6 +207,9 @@ def tidy_metadata(metadata: dict) -> dict:
         gh_readme = metadata.pop("gh-readme")
         print(f"Found GitHub README for {metadata['name']} at {gh_readme['url']}")
         metadata["readme-url"] = gh_readme["url"]
+
+    # Don't need the entry points/scripts in the index
+    metadata.pop("scripts", None)
 
     return metadata
 
