@@ -31,6 +31,6 @@ plugin-type = "pypkg"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
-git.commit = "099a07072a92fa821aeefe621ddcbcbef888dcd2"
+git.commit = "ddd6d87dadc144307e51cbab69857e86a52aec7c"
 metadata = "pyproject.toml"
 plugin-type = "pypixi"
