@@ -290,7 +290,7 @@ if __name__ == "__main__":
 
     auth = Auth.Token(args.token) if args.token else None
 
-    gh = Github(auth=auth) if auth else Github()
+    gh = Github(auth=auth)
 
     repos_file = Path(__file__).with_name("repositories.toml")
     with open(repos_file, "rb") as f:
