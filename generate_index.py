@@ -112,6 +112,11 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
     # which arrays the TOML contains
     metadata["feature-types"] = [t for t in FEATURE_TYPES if t in avogadro_metadata]
 
+    # If the plugin is a Python package, get the entry point
+    # It doesn't go into the index, but we want to validate it
+    if "scripts" in project_metadata:
+        metadata["scripts"] = project_metadata["scripts"]
+
     return metadata
 
 
@@ -172,12 +177,24 @@ def validate_metadata(metadata: dict):
         # The commit of a release and the commit given in the TOML file must match
         # TODO
 
-    for c in metadata["name"]:
+    name: str = metadata["name"]
+    for c in name:
         # Only a-z, A-Z, 0-9, - are valid in plugin names
         if c.isascii() and (c.isalnum() or c == "-"):
             continue
         else:
-            raise Exception(f"{metadata['name']} is not a valid plugin name!")
+            raise Exception(f"{name} is not a valid plugin name (disallowed characters)!")
+    # Plugin name must begin with `avogadro-`
+    if not name.startswith("avogadro-"):
+        raise Exception(f"{name} is not a valid plugin name (missing prefix)!")
+    
+    # Python packages must have a correctly defined entry point
+    if metadata["plugin-type"] in ["pypkg", "pypixi"]:
+        scripts = metadata.get("scripts")
+        if scripts and metadata["name"] in scripts:
+            pass
+        else:
+            raise Exception(f"{metadata['name']} does not define an entry point that is the same as the plugin name!")
 
 
 def tidy_metadata(metadata: dict) -> dict:
@@ -191,6 +208,9 @@ def tidy_metadata(metadata: dict) -> dict:
         print(f"Found GitHub README for {metadata['name']} at {gh_readme['url']}")
         metadata["readme-url"] = gh_readme["url"]
 
+    # Don't need the entry points/scripts in the index
+    metadata.pop("scripts", None)
+
     return metadata
 
 
@@ -199,8 +219,8 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
     the provided dict."""
     all_metadata = []
 
-    for plugin_name, repo_info in repos.items():
-        print(f"Generating metadata for {plugin_name} using {repo_info['metadata']}...")
+    for table, repo_info in repos.items():
+        print(f"Generating metadata for {table} using {repo_info['metadata']}...")
         # First just validate the information in `repositories.toml`
         validate_repo_info(repo_info)
 
@@ -210,7 +230,7 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
         elif toml_filename == "pyproject.toml":
             toml_format = "pyproject"
         else:
-            raise Exception(f"Metadata file provided by {plugin_name} not a recognized format!")
+            raise Exception(f"Metadata file provided by {table} not a recognized format!")
 
         if "git" in repo_info:
             # Git repo, which for now means it will always be a GitHub repo
@@ -274,6 +294,10 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
         plugin_metadata = toml_metadata | repo_info | repo_metadata
 
         validate_metadata(plugin_metadata)
+        # The one thing that doesn't get validated by `validate_metadata()` is
+        # that the table key was the plugin name (minus the `avogadro-` prefix)
+        if plugin_metadata["name"] != "avogadro-" + table:
+            raise Exception(f"The name of the [{table}] table in repositories.toml is incorrect!\nThe plugin name is {plugin_metadata['name']}\nThe table header should be [{plugin_metadata['name'].removeprefix('avogadro-')}]")
         plugin_metadata = tidy_metadata(plugin_metadata)
 
         all_metadata.append(plugin_metadata)
@@ -290,7 +314,7 @@ if __name__ == "__main__":
 
     auth = Auth.Token(args.token) if args.token else None
 
-    gh = Github(auth=auth) if auth else Github()
+    gh = Github(auth=auth)
 
     repos_file = Path(__file__).with_name("repositories.toml")
     with open(repos_file, "rb") as f:

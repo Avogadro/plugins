@@ -1,13 +1,15 @@
-[pypkg-demo]
+# The table key should be the plugin name minus the `avogadro-` prefix!
+
+[demo-pypkg]
 git.repo = "https://github.com/matterhorn103/avo-plugin-demo.git"
-git.commit = "dbbc4d49396ac2b7746abb0bec0af6e577d8c0c5"
-path = "pypkg-demo"
+git.commit = "819acef635f2a146970499d6d37a743d77ebd4fe"
+path = "avogadro-demo-pypkg"
 metadata = "pyproject.toml"
 plugin-type = "pypkg"
 
 [generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
-git.commit = "143a06f3fc053a886fd47ab9d08f583997a4f009"
+git.commit = "5226d49bba54a42e6479a10876f7d3d317f9ff6d"
 metadata = "pyproject.toml"
 plugin-type = "pypkg"
 
