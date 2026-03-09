@@ -66,3 +66,9 @@ git.repo = "https://github.com/ghutchis/avogadro-antechamber-charges.git"
 git.commit = "5f6c70b459d8f76ebc08545cf1107d6b3ec384e3"
 metadata = "pyproject.toml"
 plugin-type = "pypixi"
+
+[chiraltube]
+git.repo = "https://github.com/ghutchis/avogadro-chiraltube.git"
+git.commit = "170467fc57c4363587bc5dfb206d5c36ad61039f"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
