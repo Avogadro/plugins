@@ -12,6 +12,7 @@ import json
 import shutil
 import tempfile
 import tomllib
+import traceback
 import urllib.request
 from pathlib import Path
 
@@ -247,95 +248,109 @@ def tidy_metadata(metadata: dict) -> dict:
     return metadata
 
 
+def get_metadata(table_name: str, repo_info: dict) -> dict:
+    """Get and validate the metadata for a single plugin based on the provided
+    information./"""
+    print(f"Generating metadata for {table_name} using {repo_info['metadata']}...")
+    # First just validate the information in `repositories.toml`
+    validate_repo_info(repo_info)
+
+    toml_filename = repo_info["metadata"].split("/")[-1]
+    if toml_filename == "avogadro.toml":
+        toml_format = "avogadro"
+    elif toml_filename == "pyproject.toml":
+        toml_format = "pyproject"
+    else:
+        raise Exception(f"Metadata file provided by {table_name} not a recognized format!")
+
+    if "git" in repo_info:
+        # Git repo, which for now means it will always be a GitHub repo
+        # (support for GitLab and arbitrary repos is hopefully to come)
+        repo_url = repo_info["git"]["repo"].removesuffix(".git")
+        repo_name = repo_url.removeprefix("https://github.com/")
+        commit = repo_info["git"]["commit"]
+        gh_repo = gh.get_repo(repo_name)
+
+        # Automatically generate the source archive details for Avogadro
+        src_url = f"{repo_url}/archive/{commit}.zip"
+        src_hash = hashlib.sha256()
+        with urllib.request.urlopen(src_url) as response:
+            while chunk := response.read(8192):
+                src_hash.update(chunk)
+        repo_info["src"] = {"url": src_url, "sha256": src_hash.hexdigest()}
+
+        path = repo_info.get("path")
+        toml = fetch_gh_toml(gh_repo, commit, path, repo_info["metadata"])
+        toml_metadata = extract_toml_metadata(toml, toml_format)
+
+        release_tag = repo_info.get("release-tag", None)
+        repo_metadata = get_gh_repo_metadata(gh_repo, commit, release_tag)
+    else:
+        # Arbitrary source code archive
+        src_info = repo_info["src"]
+        src_hash = hashlib.sha256()
+        with tempfile.NamedTemporaryFile(delete_on_close=False) as tmp:
+            with urllib.request.urlopen(src_info["url"]) as response:
+                while chunk := response.read(8192):
+                    tmp.write(chunk)
+                    src_hash.update(chunk)
+            tmp.close()
+            # First confirm the hash is correct
+            assert src_hash.hexdigest() == src_info["sha256"]
+            # Extract the archive's contents
+            # We don't know the format, so try all in turn
+            with tempfile.TemporaryDirectory() as d:
+                src = Path(d)
+                for fmt in ["zip", "tar", "gztar", "bztar", "xztar"]:
+                    try:
+                        shutil.unpack_archive(tmp.name, src, fmt)
+                        # Stop once we extract successfully
+                        break
+                    except shutil.ReadError:
+                        continue
+                path = repo_info.get("path")
+                if len(list(src.iterdir())) > 1:
+                    toml_file: Path = src / path / toml_filename
+                else:
+                    # Archive was presumably nested
+                    toml_file: Path = next(src.iterdir()) / path / toml_filename
+                with open(toml_file, "rb") as f:
+                    toml = tomllib.load(f)
+                toml_metadata = extract_toml_metadata(toml, toml_format)
+
+        # There is no repo metadata to look at, so just set defaults
+        repo_metadata = {"has-release": False, "readme-url": None}
+
+    # Combine metadata from all sources, including that in `repositories.toml`
+    plugin_metadata = toml_metadata | repo_info | repo_metadata
+
+    validate_metadata(plugin_metadata)
+    # The one thing that doesn't get validated by `validate_metadata()` is
+    # that the table key was the plugin name (minus the `avogadro-` prefix)
+    if plugin_metadata["name"] != "avogadro-" + table_name:
+        raise Exception(
+            f"The name of the [{table_name}] table in repositories.toml is incorrect!\nThe plugin name is {plugin_metadata['name']}\nThe table header should be [{plugin_metadata['name'].removeprefix('avogadro-')}]"
+        )
+    plugin_metadata = tidy_metadata(plugin_metadata)
+
+    return plugin_metadata
+
+
 def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
     """Collect all the metadata for all plugins with repository information in
     the provided dict."""
     all_metadata = []
 
-    for table, repo_info in repos.items():
-        print(f"Generating metadata for {table} using {repo_info['metadata']}...")
-        # First just validate the information in `repositories.toml`
-        validate_repo_info(repo_info)
-
-        toml_filename = repo_info["metadata"].split("/")[-1]
-        if toml_filename == "avogadro.toml":
-            toml_format = "avogadro"
-        elif toml_filename == "pyproject.toml":
-            toml_format = "pyproject"
-        else:
-            raise Exception(f"Metadata file provided by {table} not a recognized format!")
-
-        if "git" in repo_info:
-            # Git repo, which for now means it will always be a GitHub repo
-            # (support for GitLab and arbitrary repos is hopefully to come)
-            repo_url = repo_info["git"]["repo"].removesuffix(".git")
-            repo_name = repo_url.removeprefix("https://github.com/")
-            commit = repo_info["git"]["commit"]
-            gh_repo = gh.get_repo(repo_name)
-
-            # Automatically generate the source archive details for Avogadro
-            src_url = f"{repo_url}/archive/{commit}.zip"
-            src_hash = hashlib.sha256()
-            with urllib.request.urlopen(src_url) as response:
-                while chunk := response.read(8192):
-                    src_hash.update(chunk)
-            repo_info["src"] = {"url": src_url, "sha256": src_hash.hexdigest()}
-
-            path = repo_info.get("path")
-            toml = fetch_gh_toml(gh_repo, commit, path, repo_info["metadata"])
-            toml_metadata = extract_toml_metadata(toml, toml_format)
-
-            release_tag = repo_info.get("release-tag", None)
-            repo_metadata = get_gh_repo_metadata(gh_repo, commit, release_tag)
-        else:
-            # Arbitrary source code archive
-            src_info = repo_info["src"]
-            src_hash = hashlib.sha256()
-            with tempfile.NamedTemporaryFile(delete_on_close=False) as tmp:
-                with urllib.request.urlopen(src_info["url"]) as response:
-                    while chunk := response.read(8192):
-                        tmp.write(chunk)
-                        src_hash.update(chunk)
-                tmp.close()
-                # First confirm the hash is correct
-                assert src_hash.hexdigest() == src_info["sha256"]
-                # Extract the archive's contents
-                # We don't know the format, so try all in turn
-                with tempfile.TemporaryDirectory() as d:
-                    src = Path(d)
-                    for fmt in ["zip", "tar", "gztar", "bztar", "xztar"]:
-                        try:
-                            shutil.unpack_archive(tmp.name, src, fmt)
-                            # Stop once we extract successfully
-                            break
-                        except shutil.ReadError:
-                            continue
-                    path = repo_info.get("path")
-                    if len(list(src.iterdir())) > 1:
-                        toml_file: Path = src / path / toml_filename
-                    else:
-                        # Archive was presumably nested
-                        toml_file: Path = next(src.iterdir()) / path / toml_filename
-                    with open(toml_file, "rb") as f:
-                        toml = tomllib.load(f)
-                    toml_metadata = extract_toml_metadata(toml, toml_format)
-
-            # There is no repo metadata to look at, so just set defaults
-            repo_metadata = {"has-release": False, "readme-url": None}
-
-        # Combine metadata from all sources, including that in `repositories.toml`
-        plugin_metadata = toml_metadata | repo_info | repo_metadata
-
-        validate_metadata(plugin_metadata)
-        # The one thing that doesn't get validated by `validate_metadata()` is
-        # that the table key was the plugin name (minus the `avogadro-` prefix)
-        if plugin_metadata["name"] != "avogadro-" + table:
-            raise Exception(
-                f"The name of the [{table}] table in repositories.toml is incorrect!\nThe plugin name is {plugin_metadata['name']}\nThe table header should be [{plugin_metadata['name'].removeprefix('avogadro-')}]"
-            )
-        plugin_metadata = tidy_metadata(plugin_metadata)
-
-        all_metadata.append(plugin_metadata)
+    for table_name, repo_info in repos.items():
+        print("----------" * 8)
+        try:
+            plugin_metadata = get_metadata(table_name, repo_info)
+            all_metadata.append(plugin_metadata)
+        except Exception as e:
+            # Don't halt if a plugin fails, because that prevents us seeing how
+            # many plugins fail when we change this script
+            # We should *not* include the plugin in the index though, obviously
+            traceback.print_exception(e)
 
     return all_metadata
 
