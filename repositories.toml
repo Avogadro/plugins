@@ -78,3 +78,21 @@ git.repo = "https://github.com/ghutchis/avogadro-mace.git"
 git.commit = "7771448319340907cff05c3e7a64c3785d637208"
 metadata = "pyproject.toml"
 plugin-type = "pypkg"
+
+[pymatgen]
+git.repo = "https://github.com/ghutchis/avogadro-pymatgen.git"
+git.commit = "aa1fb4c448ec112e3a75b171325fc1ff79b912ef"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
+
+[mdtraj]
+git.repo = "https://github.com/ghutchis/avogadro-mdtraj.git"
+git.commit = "49ce44d9bd4a51568bec07ce5cf110b1ab0b7317"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
+
+[ob-energy]
+git.repo = "https://github.com/ghutchis/avogadro-ob-energy"
+git.commit = "812474ae62749bc99f76b747f7a80d0afe774bfe"
+metadata = "pyproject.toml"
+plugin-type = "pypkg"
