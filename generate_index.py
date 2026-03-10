@@ -133,7 +133,7 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
         metadata["conda-platforms"] = pixi_metadata["workspace"]["platforms"]
         # Work out whether the plugin has Conda dependencies and therefore
         # requires Avogadro to have access to Pixi
-        metadata["conda-dependencies"] = pixi_metadata["dependencies"].keys()
+        metadata["conda-dependencies"] = pixi_metadata.get("dependencies", {}).keys()
         # Make sure the package itself is an editable dependency, but that
         # there's no other PyPI dependencies listed in the Pixi table
         if (
@@ -346,6 +346,7 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
         try:
             plugin_metadata = get_metadata(table_name, repo_info)
             all_metadata.append(plugin_metadata)
+            print(f"Metadata OK, {table_name} added to generated plugin index")
         except Exception as e:
             # Don't halt if a plugin fails, because that prevents us seeing how
             # many plugins fail when we change this script
