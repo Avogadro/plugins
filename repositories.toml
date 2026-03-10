@@ -35,7 +35,7 @@ plugin-type = "pypkg"
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
 git.commit = "ddd6d87dadc144307e51cbab69857e86a52aec7c"
 metadata = "pyproject.toml"
-plugin-type = "pypixi"
+plugin-type = "pypkg"
 
 [aimnet2]
 git.repo = "https://github.com/ghutchis/avogadro-aimnet2.git"
@@ -59,13 +59,13 @@ plugin-type = "pypkg"
 git.repo = "https://github.com/ghutchis/avogadro-multicharge.git"
 git.commit = "bbc0d7bd093a87b1e27227ea861847e3485a9d3a"
 metadata = "pyproject.toml"
-plugin-type = "pypixi"
+plugin-type = "pypkg"
 
 [antechamber-charges]
 git.repo = "https://github.com/ghutchis/avogadro-antechamber-charges.git"
 git.commit = "5f6c70b459d8f76ebc08545cf1107d6b3ec384e3"
 metadata = "pyproject.toml"
-plugin-type = "pypixi"
+plugin-type = "pypkg"
 
 [chiraltube]
 git.repo = "https://github.com/ghutchis/avogadro-chiraltube.git"

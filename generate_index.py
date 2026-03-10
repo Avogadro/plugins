@@ -23,7 +23,6 @@ from github import Auth
 PLUGIN_TYPES = [
     "pyscript",
     "pypkg",
-    "pypixi",
 ]
 
 """A list of current plugin feature types."""
@@ -84,9 +83,11 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
     if toml_format == "avogadro":
         project_metadata = toml
         avogadro_metadata = toml
+        pixi_metadata = None
     else:
         project_metadata = toml["project"]
         avogadro_metadata = toml["tool"]["avogadro"]
+        pixi_metadata = toml["tool"].get("pixi", None)
 
     # Required fields in `[project]`/the top level
     for required_key in ["name", "version", "authors", "license"]:
@@ -106,17 +107,45 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
         metadata[required_key] = avogadro_metadata[required_key]
 
     # Optional fields in `[tool.avogadro]`/the top level
-    metadata["minimum-avogadro-version"] = avogadro_metadata.get("minimum-avogadro-version", "1.103")
+    metadata["minimum-avogadro-version"] = avogadro_metadata.get(
+        "minimum-avogadro-version", "1.103"
+    )
 
     # Also determine and store what features the plugin provides by looking at
     # which arrays the TOML contains
     metadata["feature-types"] = [t for t in FEATURE_TYPES if t in avogadro_metadata]
 
-    # If the plugin is a Python package, get the entry point
-    # It doesn't go into the index, but we want to validate it
+    # If the plugin is a Python package...
     if "scripts" in project_metadata:
+        # Get the entry point
+        # (It doesn't go into the index, but we want to validate it)
         metadata["scripts"] = project_metadata["scripts"]
-
+        # The plugin is required to have a minimal Pixi table, regardless of
+        # whether the plugin needs Conda dependencies
+        if "channels" not in pixi_metadata["workspace"]:
+            raise Exception(
+                f"{metadata['name']} needs to specify a Conda channel! e.g. conda-forge"
+            )
+        # Might be useful to know what platforms the plugin supports
+        # Note that these are Conda platform tags and differ from those of
+        # Python; they're also hard to find proper documentation for
+        metadata["conda-platforms"] = pixi_metadata["workspace"]["platforms"]
+        # Work out whether the plugin has Conda dependencies and therefore
+        # requires Avogadro to have access to Pixi
+        metadata["conda-dependencies"] = pixi_metadata["dependencies"].keys()
+        # Make sure the package itself is an editable dependency, but that
+        # there's no other PyPI dependencies listed in the Pixi table
+        if (
+            len(pixi_metadata["pypi-dependencies"]) < 1
+            or metadata["name"] not in pixi_metadata["pypi-dependencies"]
+        ):
+            raise Exception(
+                f"{metadata['name']} does not include itself as an editable dependency!"
+            )
+        if len(pixi_metadata["pypi-dependencies"]) > 1:
+            raise Exception(
+                f"{metadata['name']} specifies PyPI dependencies in tool.pixi.pypi-dependencies instead of project.dependencies!"
+            )
     return metadata
 
 
@@ -139,8 +168,10 @@ def validate_repo_info(repo_info: dict):
         assert "sha256" in src_info
 
     # Confirm presence of other required information
-    for required_key in ["metadata", "plugin-type"]:
-        assert required_key in repo_info
+    # Metadata file must be `avogadro.toml` or `pyproject.toml` at top level
+    assert repo_info["metadata"] in ["avogadro.toml", "pyproject.toml"]
+
+    assert repo_info["plugin-type"] in PLUGIN_TYPES
 
     # Make sure that any path provided is to a directory, not a file, but with
     # no final slash, and that backslashes aren't used
@@ -187,14 +218,16 @@ def validate_metadata(metadata: dict):
     # Plugin name must begin with `avogadro-`
     if not name.startswith("avogadro-"):
         raise Exception(f"{name} is not a valid plugin name (missing prefix)!")
-    
+
     # Python packages must have a correctly defined entry point
-    if metadata["plugin-type"] in ["pypkg", "pypixi"]:
+    if metadata["plugin-type"] == "pypkg":
         scripts = metadata.get("scripts")
         if scripts and metadata["name"] in scripts:
             pass
         else:
-            raise Exception(f"{metadata['name']} does not define an entry point that is the same as the plugin name!")
+            raise Exception(
+                f"{metadata['name']} does not define an entry point that is the same as the plugin name!"
+            )
 
 
 def tidy_metadata(metadata: dict) -> dict:
@@ -279,10 +312,10 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
                             continue
                     path = repo_info.get("path")
                     if len(list(src.iterdir())) > 1:
-                        toml_file: Path = src/path/toml_filename
+                        toml_file: Path = src / path / toml_filename
                     else:
                         # Archive was presumably nested
-                        toml_file: Path = next(src.iterdir())/path/toml_filename
+                        toml_file: Path = next(src.iterdir()) / path / toml_filename
                     with open(toml_file, "rb") as f:
                         toml = tomllib.load(f)
                     toml_metadata = extract_toml_metadata(toml, toml_format)
@@ -297,7 +330,9 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
         # The one thing that doesn't get validated by `validate_metadata()` is
         # that the table key was the plugin name (minus the `avogadro-` prefix)
         if plugin_metadata["name"] != "avogadro-" + table:
-            raise Exception(f"The name of the [{table}] table in repositories.toml is incorrect!\nThe plugin name is {plugin_metadata['name']}\nThe table header should be [{plugin_metadata['name'].removeprefix('avogadro-')}]")
+            raise Exception(
+                f"The name of the [{table}] table in repositories.toml is incorrect!\nThe plugin name is {plugin_metadata['name']}\nThe table header should be [{plugin_metadata['name'].removeprefix('avogadro-')}]"
+            )
         plugin_metadata = tidy_metadata(plugin_metadata)
 
         all_metadata.append(plugin_metadata)
@@ -309,7 +344,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate plugin index")
     parser.add_argument("--token", "-t", help="GitHub personal access token")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
-    parser.add_argument("--show", action="store_true", help="Print to stdout instead of saving to file")
+    parser.add_argument(
+        "--show", action="store_true", help="Print to stdout instead of saving to file"
+    )
     args = parser.parse_args()
 
     auth = Auth.Token(args.token) if args.token else None
@@ -324,5 +361,5 @@ if __name__ == "__main__":
     if args.show:
         print(json.dumps(metadata, indent=indent))
     else:
-        with open(Path.cwd()/"plugins2.json", "w", encoding="utf-8") as f:
+        with open(Path.cwd() / "plugins2.json", "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=indent)
