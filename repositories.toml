@@ -1,80 +1,97 @@
-# The table key should be the plugin name minus the `avogadro-` prefix!
+# GUIDANCE FOR ADDING A PLUGIN TABLE
+# REQUIRED KEYS
+# `[plugin-name]`
+#   - The table key should be the plugin's name minus the `avogadro-` prefix.
+#
+# - `git` or `src`
+#   - Indicate how to obtain the plugin's source code.
+#   - A repository on GitHub only needs to provide `git.repo` and `git.commit`.
+#   - Git repositories in locations other than GitHub are not currently
+#     supported, but please tell us if you'd have liked to have had the option!
+#   - An archive at some URL should instead provide `src.url` and `src.sha256`
+#     - The format of the archive must be one of: zip, tar, gztar, bztar, or
+#       xztar.
+#     - `sha256` is the SHA-256 hash of the downloaded archive, not the
+#       decompressed files.
+#
+# REQUIRED KEYS IF NOT DEFAULT
+# These keys have default values if they are not specified.
+# - `path`
+#   - Used to indicate where the plugin's source code is to be found within the
+#     repository/archive.
+#   - Use `/` as the path separator, not `\`
+#   - If this is specified, you probably want to specify `readme-url` too.
+#   - default = "."
+#
+# - `metadata`
+#   - The plugin's metadata file, located at `path`.
+#   - options = ["pyproject.toml", "avogadro.toml"]
+#   - default = "pyproject.toml"
+#
+# - `plugin-type`
+#   - options = ["pypkg", "pyscript"]
+#   - default = "pypkg"
+#
+# OPTIONAL KEYS
+# - `release-tag`
+#   - If the plugin is in a GitHub repository and the given commit corresponds
+#     to a specific release, you should provide the tag of the release.
+# - `readme-url`
+#   - A URL that Avogadro can use to get the README file for display in the
+#     Avogadro GUI.
+#   - If not specified, if the plugin is in a GitHub repository, the README of
+#     the repo will be used; thus, if `path` is specified, you probably want to
+#     specify this too.
 
 [demo-pypkg]
 git.repo = "https://github.com/matterhorn103/avo-plugin-demo.git"
 git.commit = "819acef635f2a146970499d6d37a743d77ebd4fe"
 path = "avogadro-demo-pypkg"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
 git.commit = "5226d49bba54a42e6479a10876f7d3d317f9ff6d"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [rdkit]
 git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
 git.commit = "f6dd12fb64f0c2fed05ed5391ce264651713c7aa"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [cclib]
 git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
 git.commit = "69927f5a7ed158bafe333305bd5c5fe4afb6134c"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [build-ase]
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
 git.commit = "b54b0cbecf3fdc5f1a2de834615776a33f7d85ec"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
 git.commit = "ddd6d87dadc144307e51cbab69857e86a52aec7c"
-metadata = "pyproject.toml"
-plugin-type = "pypixi"
 
 [aimnet2]
 git.repo = "https://github.com/ghutchis/avogadro-aimnet2.git"
 git.commit = "3c6542ff8e0c81be6e634a7a622c7a4f8097137d"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [genice]
 git.repo = "https://github.com/ghutchis/avogadro-genice.git"
 git.commit = "206eb2b670d666d603e340a9bf06f8a2d634efae"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [turtlemol]
 git.repo = "https://github.com/ghutchis/avogadro-turtlemol.git"
 git.commit = "eb1b4ab77ec7a4130209445e8c6736d170286998"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [multicharge]
 git.repo = "https://github.com/ghutchis/avogadro-multicharge.git"
 git.commit = "bbc0d7bd093a87b1e27227ea861847e3485a9d3a"
-metadata = "pyproject.toml"
-plugin-type = "pypixi"
 
 [antechamber-charges]
 git.repo = "https://github.com/ghutchis/avogadro-antechamber-charges.git"
 git.commit = "5f6c70b459d8f76ebc08545cf1107d6b3ec384e3"
-metadata = "pyproject.toml"
-plugin-type = "pypixi"
 
 [chiraltube]
 git.repo = "https://github.com/ghutchis/avogadro-chiraltube.git"
 git.commit = "170467fc57c4363587bc5dfb206d5c36ad61039f"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
 
 [mace]
 git.repo = "https://github.com/ghutchis/avogadro-mace.git"
 git.commit = "7771448319340907cff05c3e7a64c3785d637208"
-metadata = "pyproject.toml"
-plugin-type = "pypkg"
