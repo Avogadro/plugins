@@ -231,7 +231,7 @@ def validate_metadata(metadata: dict):
             )
 
 
-def tidy_metadata(metadata: dict) -> dict:
+def tidy_metadata(metadata: dict):
     """Do any final tidying up of the metadata.
 
     This changes the input `dict`."""
@@ -245,14 +245,26 @@ def tidy_metadata(metadata: dict) -> dict:
     # Don't need the entry points/scripts in the index
     metadata.pop("scripts", None)
 
-    return metadata
+
+def set_defaults(repo_info: dict):
+    """Set default values for various keys that are optional in `repositories.toml`."""
+    # Chosen because at the moment the vast majority of plugins are Python packages;
+    # this may change in future
+    defaults = {
+        "metadata": "pyproject.toml",
+        "plugin-type": "pypkg",
+    }
+    for k, v in defaults.items():
+        repo_info.setdefault(k, v)
 
 
 def get_metadata(table_name: str, repo_info: dict) -> dict:
     """Get and validate the metadata for a single plugin based on the provided
-    information./"""
+    information."""
+    # First add the default values for any optional keys
+    set_defaults(repo_info)
     print(f"Generating metadata for {table_name} using {repo_info['metadata']}...")
-    # First just validate the information in `repositories.toml`
+    # Next just validate the information in `repositories.toml`
     validate_repo_info(repo_info)
 
     toml_filename = repo_info["metadata"].split("/")[-1]
@@ -332,7 +344,7 @@ def get_metadata(table_name: str, repo_info: dict) -> dict:
         raise Exception(
             f"The name of the [{table_name}] table in repositories.toml is incorrect!\nThe plugin name is {plugin_metadata['name']}\nThe table header should be [{plugin_metadata['name'].removeprefix('avogadro-')}]"
         )
-    plugin_metadata = tidy_metadata(plugin_metadata)
+    tidy_metadata(plugin_metadata)
 
     return plugin_metadata
 
