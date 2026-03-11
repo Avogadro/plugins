@@ -268,7 +268,7 @@ def set_defaults(repo_info: dict):
         repo_info.setdefault(k, v)
 
 
-def get_metadata(table_name: str, repo_info: dict) -> dict:
+def get_metadata(table_name: str, repo_info: dict, gh: Github) -> dict:
     """Get and validate the metadata for a single plugin based on the provided
     information."""
     # First add the default values for any optional keys
@@ -361,7 +361,7 @@ def get_metadata(table_name: str, repo_info: dict) -> dict:
     return plugin_metadata
 
 
-def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
+def get_metadata_all(repos: dict[str, dict], gh: Github, strict: bool) -> list[dict]:
     """Collect all the metadata for all plugins with repository information in
     the provided dict."""
     all_metadata = []
@@ -369,14 +369,17 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
     for table_name, repo_info in repos.items():
         print("----------" * 8)
         try:
-            plugin_metadata = get_metadata(table_name, repo_info)
+            plugin_metadata = get_metadata(table_name, repo_info, gh)
             all_metadata.append(plugin_metadata)
             print(f"Metadata OK, {table_name} added to generated plugin index")
         except Exception as e:
-            # Don't halt if a plugin fails, because that prevents us seeing how
-            # many plugins fail when we change this script
-            # We should *not* include the plugin in the index though, obviously
-            traceback.print_exception(e)
+            if strict:
+                raise e
+            else:
+                # By default, don't halt if a plugin fails, because that prevents us
+                # seeing how many plugins fail when we change this script
+                # We should *not* include the plugin in the index though, obviously
+                traceback.print_exception(e)
 
     return all_metadata
 
@@ -390,6 +393,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--show", action="store_true", help="Print to stdout instead of saving to file"
     )
+    parser.add_argument(
+        "--strict", action="store_true", help="Error if any plugin entry raises an exception"
+    )
     args = parser.parse_args()
 
     auth = Auth.Token(args.token) if args.token else None
@@ -399,7 +405,7 @@ if __name__ == "__main__":
     repos_file = Path(__file__).with_name("repositories.toml")
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
-    metadata = get_metadata_all(repos, gh)
+    metadata = get_metadata_all(repos, gh, args.strict)
     indent = 2 if args.pretty else None
     if args.show:
         print(json.dumps(metadata, indent=indent))
