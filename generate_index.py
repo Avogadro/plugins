@@ -279,7 +279,7 @@ def get_metadata(table_name: str, repo_info: dict) -> dict:
                 src_hash.update(chunk)
         repo_info["src"] = {"url": src_url, "sha256": src_hash.hexdigest()}
 
-        path = repo_info.get("path")
+        path = repo_info.get("path", ".")
         toml = fetch_gh_toml(gh_repo, commit, path, repo_info["metadata"])
         toml_metadata = extract_toml_metadata(toml, toml_format)
 
@@ -308,7 +308,7 @@ def get_metadata(table_name: str, repo_info: dict) -> dict:
                         break
                     except shutil.ReadError:
                         continue
-                path = repo_info.get("path")
+                path = repo_info.get("path", ".")
                 if len(list(src.iterdir())) > 1:
                     toml_file: Path = src / path / toml_filename
                 else:
@@ -322,7 +322,8 @@ def get_metadata(table_name: str, repo_info: dict) -> dict:
         repo_metadata = {"has-release": False, "readme-url": None}
 
     # Combine metadata from all sources, including that in `repositories.toml`
-    plugin_metadata = toml_metadata | repo_info | repo_metadata
+    # The TOML metadata file of the plugin itself takes precedence
+    plugin_metadata = repo_info | repo_metadata | toml_metadata
 
     validate_metadata(plugin_metadata)
     # The one thing that doesn't get validated by `validate_metadata()` is
