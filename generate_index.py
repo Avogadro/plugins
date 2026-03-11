@@ -94,7 +94,11 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
     for required_key in ["name", "version", "authors", "license"]:
         # Only want authors' names, not emails
         if required_key == "authors":
-            authors = [author["name"] for author in project_metadata["authors"] if "name" in author]
+            authors = [
+                author["name"]
+                for author in project_metadata["authors"]
+                if "name" in author
+            ]
             metadata["authors"] = authors
             continue
         metadata[required_key] = project_metadata[required_key]
@@ -189,7 +193,9 @@ def validate_metadata(metadata: dict):
     format, type etc. according to the requirements."""
 
     if not isinstance(metadata["minimum-avogadro-version"], str):
-        raise Exception(f"Minimum Avogadro version number of {metadata['name']} is not a string!")
+        raise Exception(
+            f"Minimum Avogadro version number of {metadata['name']} is not a string!"
+        )
 
     if not isinstance(metadata["version"], str):
         raise Exception(f"Version number of {metadata['name']} is not a string!")
@@ -204,7 +210,9 @@ def validate_metadata(metadata: dict):
     if metadata["has-release"]:
         # The version in the TOML file must match the release version
         if not metadata["version"] == metadata["release-version"]:
-            raise Exception(f"Version number of {metadata['name']} does not match the release!")
+            raise Exception(
+                f"Version number of {metadata['name']} does not match the release!"
+            )
 
         # The commit of a release and the commit given in the TOML file must match
         # TODO
@@ -215,7 +223,9 @@ def validate_metadata(metadata: dict):
         if c.isascii() and (c.isalnum() or c == "-"):
             continue
         else:
-            raise Exception(f"{name} is not a valid plugin name (disallowed characters)!")
+            raise Exception(
+                f"{name} is not a valid plugin name (disallowed characters)!"
+            )
     # Plugin name must begin with `avogadro-`
     if not name.startswith("avogadro-"):
         raise Exception(f"{name} is not a valid plugin name (missing prefix)!")
@@ -273,7 +283,9 @@ def get_metadata(table_name: str, repo_info: dict) -> dict:
     elif toml_filename == "pyproject.toml":
         toml_format = "pyproject"
     else:
-        raise Exception(f"Metadata file provided by {table_name} not a recognized format!")
+        raise Exception(
+            f"Metadata file provided by {table_name} not a recognized format!"
+        )
 
     if "git" in repo_info:
         # Git repo, which for now means it will always be a GitHub repo
@@ -372,7 +384,9 @@ def get_metadata_all(repos: dict[str, dict], gh: Github) -> list[dict]:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate plugin index")
     parser.add_argument("--token", "-t", help="GitHub personal access token")
-    parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
+    parser.add_argument(
+        "--pretty", action="store_true", help="Pretty-print JSON output"
+    )
     parser.add_argument(
         "--show", action="store_true", help="Print to stdout instead of saving to file"
     )
