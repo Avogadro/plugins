@@ -50,15 +50,15 @@ path = "avogadro-demo-pypkg"
 
 [generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
-git.commit = "5226d49bba54a42e6479a10876f7d3d317f9ff6d"
+git.commit = "216a2f9a6fa1d152671ecba896c8773976c291f7"
 
 [rdkit]
 git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
-git.commit = "f6dd12fb64f0c2fed05ed5391ce264651713c7aa"
+git.commit = "5954c943d40484881cf0a97486150cbe115cc2d8"
 
 [cclib]
 git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
-git.commit = "69927f5a7ed158bafe333305bd5c5fe4afb6134c"
+git.commit = "91110cf4714eda8e3e258413553d48a5690cddd5"
 
 [build-ase]
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
@@ -66,15 +66,15 @@ git.commit = "b54b0cbecf3fdc5f1a2de834615776a33f7d85ec"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
-git.commit = "ddd6d87dadc144307e51cbab69857e86a52aec7c"
+git.commit = "287e8093f65bca5b9d27fbf517a8719ae319d108"
 
 [aimnet2]
 git.repo = "https://github.com/ghutchis/avogadro-aimnet2.git"
-git.commit = "3c6542ff8e0c81be6e634a7a622c7a4f8097137d"
+git.commit = "a47c7d84ebb8c70aefeaaf57a35655cbbd54afca"
 
 [genice]
 git.repo = "https://github.com/ghutchis/avogadro-genice.git"
-git.commit = "206eb2b670d666d603e340a9bf06f8a2d634efae"
+git.commit = "c511d64a07aa3260fb5a297847020c668819fcef"
 
 [turtlemol]
 git.repo = "https://github.com/ghutchis/avogadro-turtlemol.git"
@@ -94,7 +94,7 @@ git.commit = "170467fc57c4363587bc5dfb206d5c36ad61039f"
 
 [mace]
 git.repo = "https://github.com/ghutchis/avogadro-mace.git"
-git.commit = "7771448319340907cff05c3e7a64c3785d637208"
+git.commit = "0b7fcf863acf84aad41128ff886b7f17fcfd78dd"
 
 [pymatgen]
 git.repo = "https://github.com/ghutchis/avogadro-pymatgen.git"
