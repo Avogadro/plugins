@@ -94,7 +94,7 @@ git.commit = "170467fc57c4363587bc5dfb206d5c36ad61039f"
 
 [mace]
 git.repo = "https://github.com/ghutchis/avogadro-mace.git"
-git.commit = "0b7fcf863acf84aad41128ff886b7f17fcfd78dd"
+git.commit = "a408a390d88c97d2d05b744786d3e6f45c0668cc"
 
 [pymatgen]
 git.repo = "https://github.com/ghutchis/avogadro-pymatgen.git"
@@ -105,5 +105,13 @@ git.repo = "https://github.com/ghutchis/avogadro-mdtraj.git"
 git.commit = "49ce44d9bd4a51568bec07ce5cf110b1ab0b7317"
 
 [ob-energy]
-git.repo = "https://github.com/ghutchis/avogadro-ob-energy"
+git.repo = "https://github.com/ghutchis/avogadro-ob-energy.git"
 git.commit = "812474ae62749bc99f76b747f7a80d0afe774bfe"
+
+[mattersim]
+git.repo = "https://github.com/ghutchis/avogadro-mattersim.git"
+git.commit = "525a745aa33c580e70e2ad2e7b94874bfde0eca8"
+
+[ani-energy]
+git.repo = "https://github.com/ghutchis/avogadro-ani-energy.git"
+git.commit = "9a752e1e9044e4eac0504baf7f414697440aa4f2"
