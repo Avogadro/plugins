@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import io
 import json
+import re
 import shutil
 import tempfile
 import tomllib
@@ -34,6 +35,11 @@ FEATURE_TYPES = [
     "input-generators",
     "menu-commands",
 ]
+
+
+def normalize_pkg_name(name: str) -> str:
+    """Normalize a package name as per PEP 503."""
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def get_gh_repo_metadata(gh_repo, commit: str, release_tag: str | None) -> dict:
@@ -140,14 +146,14 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
         metadata["conda-dependencies"] = pixi_metadata.get("dependencies", {}).keys()
         # Make sure the package itself is an editable dependency, but that
         # there's no other PyPI dependencies listed in the Pixi table
-        if (
-            len(pixi_metadata["pypi-dependencies"]) < 1
-            or metadata["name"] not in pixi_metadata["pypi-dependencies"]
-        ):
+        # Have to normalize the dependency names first
+        normalized_name = normalize_pkg_name(metadata["name"])
+        pypi_deps = [normalize_pkg_name(p) for p in pixi_metadata["pypi-dependencies"].keys()]
+        if len(pypi_deps) < 1 or normalized_name not in pypi_deps:
             raise Exception(
                 f"{metadata['name']} does not include itself as an editable dependency!"
             )
-        if len(pixi_metadata["pypi-dependencies"]) > 1:
+        if len(pypi_deps) > 1:
             raise Exception(
                 f"{metadata['name']} specifies PyPI dependencies in tool.pixi.pypi-dependencies instead of project.dependencies!"
             )
