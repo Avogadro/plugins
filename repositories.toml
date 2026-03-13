@@ -43,38 +43,38 @@
 #     the repo will be used; thus, if `path` is specified, you probably want to
 #     specify this too.
 
-[demo-pypkg]
-git.repo = "https://github.com/matterhorn103/avo-plugin-demo.git"
-git.commit = "819acef635f2a146970499d6d37a743d77ebd4fe"
-path = "avogadro-demo-pypkg"
+# [demo-pypkg]
+# git.repo = "https://github.com/matterhorn103/avo-plugin-demo.git"
+# git.commit = "819acef635f2a146970499d6d37a743d77ebd4fe"
+# path = "avogadro-demo-pypkg"
 
 [generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
-git.commit = "5226d49bba54a42e6479a10876f7d3d317f9ff6d"
+git.commit = "216a2f9a6fa1d152671ecba896c8773976c291f7"
 
 [rdkit]
 git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
-git.commit = "f6dd12fb64f0c2fed05ed5391ce264651713c7aa"
+git.commit = "5954c943d40484881cf0a97486150cbe115cc2d8"
 
 [cclib]
 git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
-git.commit = "69927f5a7ed158bafe333305bd5c5fe4afb6134c"
+git.commit = "91110cf4714eda8e3e258413553d48a5690cddd5"
 
 [build-ase]
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
-git.commit = "b54b0cbecf3fdc5f1a2de834615776a33f7d85ec"
+git.commit = "2c3c72f2b97fc0231c2628a221c3dc519166c422"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
-git.commit = "ddd6d87dadc144307e51cbab69857e86a52aec7c"
+git.commit = "287e8093f65bca5b9d27fbf517a8719ae319d108"
 
 [aimnet2]
 git.repo = "https://github.com/ghutchis/avogadro-aimnet2.git"
-git.commit = "3c6542ff8e0c81be6e634a7a622c7a4f8097137d"
+git.commit = "a47c7d84ebb8c70aefeaaf57a35655cbbd54afca"
 
 [genice]
 git.repo = "https://github.com/ghutchis/avogadro-genice.git"
-git.commit = "206eb2b670d666d603e340a9bf06f8a2d634efae"
+git.commit = "c511d64a07aa3260fb5a297847020c668819fcef"
 
 [turtlemol]
 git.repo = "https://github.com/ghutchis/avogadro-turtlemol.git"
@@ -94,4 +94,28 @@ git.commit = "170467fc57c4363587bc5dfb206d5c36ad61039f"
 
 [mace]
 git.repo = "https://github.com/ghutchis/avogadro-mace.git"
-git.commit = "7771448319340907cff05c3e7a64c3785d637208"
+git.commit = "a408a390d88c97d2d05b744786d3e6f45c0668cc"
+
+[pymatgen]
+git.repo = "https://github.com/ghutchis/avogadro-pymatgen.git"
+git.commit = "aa1fb4c448ec112e3a75b171325fc1ff79b912ef"
+
+[mdtraj]
+git.repo = "https://github.com/ghutchis/avogadro-mdtraj.git"
+git.commit = "49ce44d9bd4a51568bec07ce5cf110b1ab0b7317"
+
+[ob-energy]
+git.repo = "https://github.com/ghutchis/avogadro-ob-energy.git"
+git.commit = "812474ae62749bc99f76b747f7a80d0afe774bfe"
+
+[mattersim]
+git.repo = "https://github.com/ghutchis/avogadro-mattersim.git"
+git.commit = "525a745aa33c580e70e2ad2e7b94874bfde0eca8"
+
+[ani-energy]
+git.repo = "https://github.com/ghutchis/avogadro-ani-energy.git"
+git.commit = "9a752e1e9044e4eac0504baf7f414697440aa4f2"
+
+[psi4-cubeprop]
+git.repo = "https://github.com/ghutchis/avogadro-psi4-cubeprop.git"
+git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
