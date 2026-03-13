@@ -62,7 +62,7 @@ git.commit = "91110cf4714eda8e3e258413553d48a5690cddd5"
 
 [build-ase]
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
-git.commit = "b54b0cbecf3fdc5f1a2de834615776a33f7d85ec"
+git.commit = "2c3c72f2b97fc0231c2628a221c3dc519166c422"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
@@ -115,3 +115,7 @@ git.commit = "525a745aa33c580e70e2ad2e7b94874bfde0eca8"
 [ani-energy]
 git.repo = "https://github.com/ghutchis/avogadro-ani-energy.git"
 git.commit = "9a752e1e9044e4eac0504baf7f414697440aa4f2"
+
+[psi4-cubeprop]
+git.repo = "https://github.com/ghutchis/avogadro-psi4-cubeprop.git"
+git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
