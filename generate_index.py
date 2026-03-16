@@ -143,12 +143,16 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
         metadata["conda-platforms"] = pixi_metadata["workspace"]["platforms"]
         # Work out whether the plugin has Conda dependencies and therefore
         # requires Avogadro to have access to Pixi
-        metadata["conda-dependencies"] = list(pixi_metadata.get("dependencies", {}).keys())
+        metadata["conda-dependencies"] = list(
+            pixi_metadata.get("dependencies", {}).keys()
+        )
         # Make sure the package itself is an editable dependency, but that
         # there's no other PyPI dependencies listed in the Pixi table
         # Have to normalize the dependency names first
         normalized_name = normalize_pkg_name(metadata["name"])
-        pypi_deps = [normalize_pkg_name(p) for p in pixi_metadata["pypi-dependencies"].keys()]
+        pypi_deps = [
+            normalize_pkg_name(p) for p in pixi_metadata["pypi-dependencies"].keys()
+        ]
         if len(pypi_deps) < 1 or normalized_name not in pypi_deps:
             raise Exception(
                 f"{metadata['name']} does not include itself as an editable dependency!"
@@ -400,7 +404,15 @@ if __name__ == "__main__":
         "--show", action="store_true", help="Print to stdout instead of saving to file"
     )
     parser.add_argument(
-        "--strict", action="store_true", help="Error if any plugin entry raises an exception"
+        "--strict",
+        action="store_true",
+        help="Error if any plugin entry raises an exception",
+    )
+    parser.add_argument(
+        "-p",
+        "--plugins",
+        nargs="+",
+        help="Fetch and validate the metadata for only the given plugins",
     )
     args = parser.parse_args()
 
@@ -411,6 +423,8 @@ if __name__ == "__main__":
     repos_file = Path(__file__).with_name("repositories.toml")
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
+    if args.check:
+        repos = {k: v for k, v in repos.items() if k in args.check}
     metadata = get_metadata_all(repos, gh, args.strict)
     indent = 2 if args.pretty else None
     if args.show:
