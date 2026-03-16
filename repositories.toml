@@ -64,6 +64,11 @@ git.commit = "91110cf4714eda8e3e258413553d48a5690cddd5"
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
 git.commit = "2c3c72f2b97fc0231c2628a221c3dc519166c422"
 
+[xtb]
+git.repo = "https://github.com/matterhorn103/avo_xtb.git"
+git.commit = "2e9289d462bc8fb8bf79ba02a7435f4013ec7945"
+release-tag = "0.11.0"
+
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
 git.commit = "287e8093f65bca5b9d27fbf517a8719ae319d108"
