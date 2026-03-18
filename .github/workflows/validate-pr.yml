@@ -1,0 +1,201 @@
+# .github/workflows/validate-pr.yml
+#
+# Runs on every PR that touches repositories.toml.
+# Ensures:
+#   1. The TOML is valid and well-structured
+#   2. Only one plugin is added or modified per PR
+#   3. Commits are full 40-char SHAs
+#   4. No unexpected fields or structural issues
+
+name: Validate Plugin PR
+
+on:
+  pull_request:
+    paths:
+      - "repositories.toml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Checkout base branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Copy helper script
+        run: cp head/.github/scripts/parse_plugins.py .
+
+      # ── Step 1: Validate TOML structure ──
+      - name: Validate TOML structure
+        id: validate
+        run: |
+          echo "### TOML Validation" >> "$GITHUB_STEP_SUMMARY"
+          result=$(python parse_plugins.py validate head/repositories.toml)
+          valid=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['valid'])")
+          errors=$(echo "$result" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          for e in d['errors']:
+              print(f'- ❌ {e}')
+          ")
+          warnings=$(echo "$result" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          for w in d['warnings']:
+              print(f'- ⚠️ {w}')
+          ")
+
+          if [ "$valid" = "False" ]; then
+            echo "❌ **TOML validation failed:**" >> "$GITHUB_STEP_SUMMARY"
+            echo "$errors" >> "$GITHUB_STEP_SUMMARY"
+            echo "toml_valid=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ TOML structure is valid." >> "$GITHUB_STEP_SUMMARY"
+            echo "toml_valid=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$warnings" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Warnings:**" >> "$GITHUB_STEP_SUMMARY"
+            echo "$warnings" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ── Step 2: Diff to find what changed ──
+      - name: Detect plugin changes
+        id: diff
+        run: |
+          echo "### Plugin Changes" >> "$GITHUB_STEP_SUMMARY"
+          diff_result=$(python parse_plugins.py diff base/repositories.toml head/repositories.toml)
+          echo "$diff_result" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          print(f\"Added: {len(d['added'])}\")
+          print(f\"Modified: {len(d['modified'])}\")
+          print(f\"Removed: {len(d['removed'])}\")
+          print(f\"Total changes: {d['total_changes']}\")
+          " >> "$GITHUB_STEP_SUMMARY"
+
+          total=$(echo "$diff_result" | python3 -c "import json,sys; print(json.load(sys.stdin)['total_changes'])")
+          added=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['added']))")
+          modified=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['modified']))")
+          removed=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['removed']))")
+
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "added=$added" >> "$GITHUB_OUTPUT"
+          echo "modified=$modified" >> "$GITHUB_OUTPUT"
+          echo "removed=$removed" >> "$GITHUB_OUTPUT"
+          echo "diff_json=$(echo "$diff_result" | jq -c .)" >> "$GITHUB_OUTPUT"
+
+      # ── Step 3: Enforce single-plugin-per-PR rule ──
+      - name: Check single plugin rule
+        id: single-check
+        run: |
+          total=${{ steps.diff.outputs.total }}
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Single Plugin Rule" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$total" -eq 0 ]; then
+            echo "⚠️ No plugin changes detected in repositories.toml." >> "$GITHUB_STEP_SUMMARY"
+            echo "pass=true" >> "$GITHUB_OUTPUT"
+          elif [ "$total" -eq 1 ]; then
+            echo "✅ Exactly one plugin changed — rule satisfied." >> "$GITHUB_STEP_SUMMARY"
+            echo "pass=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "❌ **$total plugins changed.** Please submit one plugin change per PR." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "This makes security review manageable and keeps the git history clean." >> "$GITHUB_STEP_SUMMARY"
+            echo "pass=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Step 4: Validate that changed repos are reachable ──
+      - name: Verify repository accessibility
+        id: repo-check
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Repository Accessibility" >> "$GITHUB_STEP_SUMMARY"
+
+          diff_json='${{ steps.diff.outputs.diff_json }}'
+          all_ok=true
+
+          # Check added and modified plugins
+          for plugin_json in $(echo "$diff_json" | jq -c '.added[], .modified[]'); do
+            name=$(echo "$plugin_json" | jq -r '.name')
+            repo=$(echo "$plugin_json" | jq -r '.repo // empty')
+            commit=$(echo "$plugin_json" | jq -r '.commit // .new_commit // empty')
+
+            if [ -z "$repo" ]; then
+              continue
+            fi
+
+            echo -n "Checking \`$name\` at \`${commit:0:7}\`... " >> "$GITHUB_STEP_SUMMARY"
+
+            # Verify the specific commit exists
+            if git ls-remote "$repo" | grep -q "^${commit}"; then
+              echo "✅ reachable" >> "$GITHUB_STEP_SUMMARY"
+            else
+              # ls-remote won't show arbitrary commits, try a shallow fetch
+              tmpdir=$(mktemp -d)
+              if git clone --bare --depth=1 "$repo" "$tmpdir" 2>/dev/null && \
+                 git -C "$tmpdir" cat-file -t "$commit" 2>/dev/null; then
+                echo "✅ reachable" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "⚠️ commit not immediately verifiable (may need full clone)" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              rm -rf "$tmpdir"
+            fi
+          done
+
+          echo "repo_ok=$all_ok" >> "$GITHUB_OUTPUT"
+
+      # ── Step 5: Post a summary comment on the PR ──
+      - name: Post PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          toml_ok="${{ steps.validate.outputs.toml_valid }}"
+          single_ok="${{ steps.single-check.outputs.pass }}"
+          total="${{ steps.diff.outputs.total }}"
+
+          if [ "$toml_ok" = "true" ] && [ "$single_ok" = "true" ]; then
+            status="✅ All validation checks passed"
+          else
+            status="❌ Some validation checks failed"
+          fi
+
+          comment="## Plugin PR Validation
+
+          ${status}
+
+          | Check | Result |
+          |-------|--------|
+          | TOML structure | $([ "$toml_ok" = "true" ] && echo "✅ Valid" || echo "❌ Invalid") |
+          | Single plugin rule | $([ "$single_ok" = "true" ] && echo "✅ Pass ($total change)" || echo "❌ Fail ($total changes)") |
+
+          See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$comment"
+
+      # ── Final: fail the job if any check failed ──
+      - name: Fail on validation errors
+        if: steps.validate.outputs.toml_valid == 'false' || steps.single-check.outputs.pass == 'false'
+        run: |
+          echo "::error::Validation failed. See job summary for details."
+          exit 1
