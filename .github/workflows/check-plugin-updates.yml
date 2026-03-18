@@ -1,0 +1,196 @@
+# .github/workflows/check-plugin-updates.yml
+#
+# Runs daily (and on-demand). For each plugin in repositories.toml,
+# checks whether the upstream repo has new commits past the pinned SHA.
+# If updates are found, opens one PR per plugin with the new commit SHA.
+
+name: Check Plugin Updates
+
+on:
+  schedule:
+    # 06:00 UTC daily
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      plugin_name:
+        description: "Check a specific plugin (leave blank for all)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    outputs:
+      updates: ${{ steps.detect.outputs.updates }}
+      count: ${{ steps.detect.outputs.count }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Detect upstream updates
+        id: detect
+        run: |
+          updates=$(python .github/scripts/parse_plugins.py check-updates)
+          echo "Raw updates: $updates"
+
+          # If a specific plugin was requested, filter to just that one
+          if [ -n "${{ inputs.plugin_name }}" ]; then
+            updates=$(echo "$updates" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          filtered = [p for p in data if p['name'] == '${{ inputs.plugin_name }}']
+          print(json.dumps(filtered))
+          ")
+          fi
+
+          count=$(echo "$updates" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
+          echo "updates=$(echo "$updates" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "### Plugin Update Check" >> "$GITHUB_STEP_SUMMARY"
+          echo "Found **$count** plugin(s) with upstream updates." >> "$GITHUB_STEP_SUMMARY"
+
+  open-pr:
+    needs: check-updates
+    if: needs.check-updates.outputs.count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      # Process one plugin at a time to avoid branch conflicts
+      max-parallel: 1
+      matrix:
+        plugin: ${{ fromJson(needs.check-updates.outputs.updates) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Check if PR already exists
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="update/${{ matrix.plugin.name }}"
+          existing=$(gh pr list --head "$branch" --state open --json number -q '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "PR #$existing already open for ${{ matrix.plugin.name }}, skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gather commit info
+        if: steps.check-pr.outputs.skip == 'false'
+        id: commit-info
+        run: |
+          repo_url="${{ matrix.plugin.repo }}"
+          latest="${{ matrix.plugin.latest_commit }}"
+
+          # Try to get the commit message for the PR body
+          # Convert git URL to GitHub API URL
+          api_url=$(echo "$repo_url" | sed 's|\.git$||' | sed 's|github.com|api.github.com/repos|')
+          commit_msg=$(curl -sf "${api_url}/commits/${latest}" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['commit']['message'][:500])" \
+            2>/dev/null || echo "(could not fetch commit message)")
+
+          # Check for a release tag
+          release_info=""
+          latest_tag=$(curl -sf "${api_url}/tags?per_page=5" \
+            | python3 -c "
+          import json, sys
+          tags = json.load(sys.stdin)
+          for t in tags:
+              if t['commit']['sha'] == '${latest}':
+                  print(t['name'])
+                  break
+          " 2>/dev/null || true)
+
+          echo "commit_msg<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$commit_msg" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Update repositories.toml
+        if: steps.check-pr.outputs.skip == 'false'
+        run: |
+          plugin="${{ matrix.plugin.name }}"
+          old_commit="${{ matrix.plugin.pinned_commit }}"
+          new_commit="${{ matrix.plugin.latest_commit }}"
+          latest_tag="${{ steps.commit-info.outputs.latest_tag }}"
+
+          # Replace the commit SHA
+          sed -i "s|$old_commit|$new_commit|" repositories.toml
+
+          # If we found a release tag, update or add release-tag
+          if [ -n "$latest_tag" ]; then
+            # Check if release-tag already exists for this plugin
+            if grep -A5 "^\[${plugin}\]" repositories.toml | grep -q "release-tag"; then
+              # Update existing release-tag (within the plugin's section)
+              python3 -c "
+          import re
+          with open('repositories.toml', 'r') as f:
+              content = f.read()
+          # Find the plugin section and update release-tag within it
+          pattern = r'(\[${plugin}\].*?release-tag\s*=\s*)\"[^\"]*\"'
+          content = re.sub(pattern, r'\1\"${latest_tag}\"', content, flags=re.DOTALL)
+          with open('repositories.toml', 'w') as f:
+              f.write(content)
+          "
+            else
+              # Add release-tag after the commit line
+              sed -i "/^\[${plugin}\]/,/^$\|^\[/ {
+                /git\.commit/a release-tag = \"${latest_tag}\"
+              }" repositories.toml
+            fi
+          fi
+
+      - name: Create Pull Request
+        if: steps.check-pr.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          plugin="${{ matrix.plugin.name }}"
+          new_commit="${{ matrix.plugin.latest_commit }}"
+          short_sha="${new_commit:0:7}"
+          branch="update/${plugin}"
+          tag_note=""
+          if [ -n "${{ steps.commit-info.outputs.latest_tag }}" ]; then
+            tag_note=" (release: ${{ steps.commit-info.outputs.latest_tag }})"
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add repositories.toml
+          git commit -m "Update ${plugin} to ${short_sha}${tag_note}"
+          git push -u origin "$branch" --force
+
+          body="## Update \`${plugin}\` to \`${short_sha}\`${tag_note}
+
+          **Repository:** ${{ matrix.plugin.repo }}
+          **Previous commit:** \`${{ matrix.plugin.pinned_commit }}\`
+          **New commit:** \`${new_commit}\`
+
+          ### Latest commit message
+          \`\`\`
+          ${{ steps.commit-info.outputs.commit_msg }}
+          \`\`\`
+
+          ---
+          *This PR was automatically created by the plugin update checker.
+          The security scan workflow will run automatically on this PR.
+          Please review the scan results before merging.*"
+
+          gh pr create \
+            --title "Update ${plugin} to ${short_sha}${tag_note}" \
+            --body "$body" \
+            --label "automated,plugin-update" \
+            --base master \
+            --head "$branch"
