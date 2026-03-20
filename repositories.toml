@@ -124,3 +124,8 @@ git.commit = "9a752e1e9044e4eac0504baf7f414697440aa4f2"
 [psi4-cubeprop]
 git.repo = "https://github.com/ghutchis/avogadro-psi4-cubeprop.git"
 git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
+
+[crest]
+git.repo = "https://github.com/matterhorn103/avogadro-crest"
+git.commit = "de7413bc8e890fca91dfd8befb7ce507cf5a3d06"
+release-tag = "0.1.0"
