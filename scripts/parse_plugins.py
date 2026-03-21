@@ -8,8 +8,7 @@ import sys
 
 from plugin_validation import (
     extract_plugins,
-    load_toml,
-    validate_all_plugins,
+    load_toml
 )
 
 

@@ -6,15 +6,7 @@ Used by both generate_index.py and parse_plugins.py.
 
 import sys
 
-# Python 3.11+ has tomllib in stdlib; fall back to tomli
-try:
-    import tomllib
-except ImportError:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        print("ERROR: Need Python 3.11+ or 'pip install tomli'", file=sys.stderr)
-        sys.exit(1)
+import tomllib
 
 
 # Valid plugin types
@@ -41,10 +33,6 @@ REPO_DEFAULTS = {
     "plugin-type": "pypkg",
 }
 
-# Keys that are file-level guidance comments, not plugin entries
-NON_PLUGIN_KEYS: set[str] = set()
-
-
 def load_toml(path: str) -> dict:
     """Load and parse a TOML file."""
     with open(path, "rb") as f:
@@ -53,11 +41,7 @@ def load_toml(path: str) -> dict:
 
 def extract_plugins(data: dict) -> dict:
     """Return only the plugin tables from parsed TOML data."""
-    plugins = {}
-    for key, value in data.items():
-        if isinstance(value, dict) and key not in NON_PLUGIN_KEYS:
-            plugins[key] = value
-    return plugins
+    return {key: value for key, value in data.items() if isinstance(value, dict)}
 
 
 def set_defaults(repo_info: dict):

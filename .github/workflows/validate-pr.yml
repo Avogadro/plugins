@@ -38,43 +38,38 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Copy helper script
-        run: cp head/.github/scripts/parse_plugins.py .
+      - name: Copy helper scripts
+        run: cp head/scripts/parse_plugins.py head/scripts/plugin_validation.py .
 
       # ── Step 1: Diff to find what changed ──
       - name: Detect plugin changes
         id: diff
         run: |
-          echo "### Plugin Changes" >> "$GITHUB_STEP_SUMMARY"
           diff_result=$(python parse_plugins.py diff base/repositories.toml head/repositories.toml)
           echo "$diff_result" | python3 -c "
-          import json, sys
+          import json, sys, os
           d = json.load(sys.stdin)
-          print(f\"Added: {len(d['added'])}\")
-          print(f\"Modified: {len(d['modified'])}\")
-          print(f\"Removed: {len(d['removed'])}\")
-          print(f\"Total changes: {d['total_changes']}\")
-          " >> "$GITHUB_STEP_SUMMARY"
+          added = len(d['added'])
+          modified = len(d['modified'])
+          removed = len(d['removed'])
+          total = d['total_changes']
+          changed = ' '.join(p['name'] for p in d['added'] + d['modified'])
 
-          total=$(echo "$diff_result" | python3 -c "import json,sys; print(json.load(sys.stdin)['total_changes'])")
-          added=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['added']))")
-          modified=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['modified']))")
-          removed=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['removed']))")
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('### Plugin Changes\n')
+              summary.write(f'Added: {added}\n')
+              summary.write(f'Modified: {modified}\n')
+              summary.write(f'Removed: {removed}\n')
+              summary.write(f'Total changes: {total}\n')
 
-          # Extract names of added/modified plugins for validation
-          changed=$(echo "$diff_result" | python3 -c "
-          import json, sys
-          d = json.load(sys.stdin)
-          names = [p['name'] for p in d['added'] + d['modified']]
-          print(' '.join(names))
-          ")
-
-          echo "total=$total" >> "$GITHUB_OUTPUT"
-          echo "added=$added" >> "$GITHUB_OUTPUT"
-          echo "modified=$modified" >> "$GITHUB_OUTPUT"
-          echo "removed=$removed" >> "$GITHUB_OUTPUT"
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'total={total}\n')
+              out.write(f'added={added}\n')
+              out.write(f'modified={modified}\n')
+              out.write(f'removed={removed}\n')
+              out.write(f'changed={changed}\n')
+          "
           echo "diff_json=$(echo "$diff_result" | jq -c .)" >> "$GITHUB_OUTPUT"
-          echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       # ── Step 2: Validate changed plugin metadata ──
       - name: Install dependencies
@@ -120,47 +115,7 @@ jobs:
             echo "pass=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Step 4: Validate that changed repos are reachable ──
-      - name: Verify repository accessibility
-        id: repo-check
-        run: |
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Repository Accessibility" >> "$GITHUB_STEP_SUMMARY"
-
-          diff_json='${{ steps.diff.outputs.diff_json }}'
-          all_ok=true
-
-          # Check added and modified plugins
-          for plugin_json in $(echo "$diff_json" | jq -c '.added[], .modified[]'); do
-            name=$(echo "$plugin_json" | jq -r '.name')
-            repo=$(echo "$plugin_json" | jq -r '.repo // empty')
-            commit=$(echo "$plugin_json" | jq -r '.commit // .new_commit // empty')
-
-            if [ -z "$repo" ]; then
-              continue
-            fi
-
-            echo -n "Checking \`$name\` at \`${commit:0:7}\`... " >> "$GITHUB_STEP_SUMMARY"
-
-            # Verify the specific commit exists
-            if git ls-remote "$repo" | grep -q "^${commit}"; then
-              echo "✅ reachable" >> "$GITHUB_STEP_SUMMARY"
-            else
-              # ls-remote won't show arbitrary commits, try a shallow fetch
-              tmpdir=$(mktemp -d)
-              if git clone --bare --depth=1 "$repo" "$tmpdir" 2>/dev/null && \
-                 git -C "$tmpdir" cat-file -t "$commit" 2>/dev/null; then
-                echo "✅ reachable" >> "$GITHUB_STEP_SUMMARY"
-              else
-                echo "⚠️ commit not immediately verifiable (may need full clone)" >> "$GITHUB_STEP_SUMMARY"
-              fi
-              rm -rf "$tmpdir"
-            fi
-          done
-
-          echo "repo_ok=$all_ok" >> "$GITHUB_OUTPUT"
-
-      # ── Step 5: Post a summary comment on the PR ──
+      # ── Step 4: Post a summary comment on the PR ──
       - name: Post PR comment
         if: always()
         env:
