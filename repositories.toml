@@ -50,7 +50,7 @@
 
 [generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
-git.commit = "216a2f9a6fa1d152671ecba896c8773976c291f7"
+git.commit = "92419fb472b065a70687875b2c8a51fa5b50a019"
 
 [rdkit]
 git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
@@ -75,7 +75,7 @@ git.commit = "287e8093f65bca5b9d27fbf517a8719ae319d108"
 
 [aimnet2]
 git.repo = "https://github.com/ghutchis/avogadro-aimnet2.git"
-git.commit = "a47c7d84ebb8c70aefeaaf57a35655cbbd54afca"
+git.commit = "3c9cce218a681d6ad07389b197919c9d6799b5a6"
 
 [genice]
 git.repo = "https://github.com/ghutchis/avogadro-genice.git"
@@ -107,7 +107,7 @@ git.commit = "aa1fb4c448ec112e3a75b171325fc1ff79b912ef"
 
 [mdtraj]
 git.repo = "https://github.com/ghutchis/avogadro-mdtraj.git"
-git.commit = "49ce44d9bd4a51568bec07ce5cf110b1ab0b7317"
+git.commit = "62ee266e340b6dcb10a6f6d8468c7532ab98653f"
 
 [ob-energy]
 git.repo = "https://github.com/ghutchis/avogadro-ob-energy.git"
@@ -124,3 +124,8 @@ git.commit = "9a752e1e9044e4eac0504baf7f414697440aa4f2"
 [psi4-cubeprop]
 git.repo = "https://github.com/ghutchis/avogadro-psi4-cubeprop.git"
 git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
+
+[crest]
+git.repo = "https://github.com/matterhorn103/avogadro-crest"
+git.commit = "de7413bc8e890fca91dfd8befb7ce507cf5a3d06"
+release-tag = "0.1.0"
