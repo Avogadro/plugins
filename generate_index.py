@@ -423,8 +423,8 @@ if __name__ == "__main__":
     repos_file = Path(__file__).with_name("repositories.toml")
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
-    if args.check:
-        repos = {k: v for k, v in repos.items() if k in args.check}
+    if args.plugins:
+        repos = {k: v for k, v in repos.items() if k in args.plugins}
     metadata = get_metadata_all(repos, gh, args.strict)
     indent = 2 if args.pretty else None
     if args.show:
