@@ -41,42 +41,7 @@ jobs:
       - name: Copy helper script
         run: cp head/.github/scripts/parse_plugins.py .
 
-      # ── Step 1: Validate TOML structure ──
-      - name: Validate TOML structure
-        id: validate
-        run: |
-          echo "### TOML Validation" >> "$GITHUB_STEP_SUMMARY"
-          result=$(python parse_plugins.py validate head/repositories.toml)
-          valid=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['valid'])")
-          errors=$(echo "$result" | python3 -c "
-          import json, sys
-          d = json.load(sys.stdin)
-          for e in d['errors']:
-              print(f'- ❌ {e}')
-          ")
-          warnings=$(echo "$result" | python3 -c "
-          import json, sys
-          d = json.load(sys.stdin)
-          for w in d['warnings']:
-              print(f'- ⚠️ {w}')
-          ")
-
-          if [ "$valid" = "False" ]; then
-            echo "❌ **TOML validation failed:**" >> "$GITHUB_STEP_SUMMARY"
-            echo "$errors" >> "$GITHUB_STEP_SUMMARY"
-            echo "toml_valid=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "✅ TOML structure is valid." >> "$GITHUB_STEP_SUMMARY"
-            echo "toml_valid=true" >> "$GITHUB_OUTPUT"
-          fi
-
-          if [ -n "$warnings" ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Warnings:**" >> "$GITHUB_STEP_SUMMARY"
-            echo "$warnings" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # ── Step 2: Diff to find what changed ──
+      # ── Step 1: Diff to find what changed ──
       - name: Detect plugin changes
         id: diff
         run: |
@@ -96,11 +61,42 @@ jobs:
           modified=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['modified']))")
           removed=$(echo "$diff_result" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['removed']))")
 
+          # Extract names of added/modified plugins for validation
+          changed=$(echo "$diff_result" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          names = [p['name'] for p in d['added'] + d['modified']]
+          print(' '.join(names))
+          ")
+
           echo "total=$total" >> "$GITHUB_OUTPUT"
           echo "added=$added" >> "$GITHUB_OUTPUT"
           echo "modified=$modified" >> "$GITHUB_OUTPUT"
           echo "removed=$removed" >> "$GITHUB_OUTPUT"
           echo "diff_json=$(echo "$diff_result" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      # ── Step 2: Validate changed plugin metadata ──
+      - name: Install dependencies
+        run: pip install PyGitHub
+
+      - name: Validate plugin metadata
+        id: validate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "### Plugin Validation" >> "$GITHUB_STEP_SUMMARY"
+          changed="${{ steps.diff.outputs.changed }}"
+          if [ -z "$changed" ]; then
+            echo "✅ No added/modified plugins to validate." >> "$GITHUB_STEP_SUMMARY"
+            echo "toml_valid=true" >> "$GITHUB_OUTPUT"
+          elif python head/generate_index.py -t "$GH_TOKEN" --strict -p $changed; then
+            echo "✅ All changed plugins validated successfully." >> "$GITHUB_STEP_SUMMARY"
+            echo "toml_valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "❌ **Plugin validation failed.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "toml_valid=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # ── Step 3: Enforce single-plugin-per-PR rule ──
       - name: Check single plugin rule

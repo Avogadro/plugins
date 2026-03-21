@@ -6,35 +6,14 @@ import json
 import subprocess
 import sys
 
-# Python 3.11+ has tomllib in stdlib; fall back to tomli
-try:
-    import tomllib
-except ImportError:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        print("ERROR: Need Python 3.11+ or 'pip install tomli'", file=sys.stderr)
-        sys.exit(1)
+from plugin_validation import (
+    extract_plugins,
+    load_toml,
+    validate_all_plugins,
+)
 
 
 TOML_PATH = "repositories.toml"
-
-# Keys that are file-level guidance comments, not plugin entries
-NON_PLUGIN_KEYS: set[str] = set()
-
-
-def load_toml(path: str) -> dict:
-    with open(path, "rb") as f:
-        return tomllib.load(f)
-
-
-def extract_plugins(data: dict) -> dict:
-    """Return only the plugin tables from the parsed TOML."""
-    plugins = {}
-    for key, value in data.items():
-        if isinstance(value, dict) and key not in NON_PLUGIN_KEYS:
-            plugins[key] = value
-    return plugins
 
 
 def cmd_list():
@@ -177,91 +156,12 @@ def cmd_diff(base_path: str, head_path: str):
     }
     print(json.dumps(result, indent=2))
 
-
-def cmd_validate(path: str):
-    """Validate the structure of a repositories.toml file."""
-    errors = []
-    warnings = []
-
-    try:
-        data = load_toml(path)
-    except Exception as e:
-        errors.append(f"Failed to parse TOML: {e}")
-        print(json.dumps({"valid": False, "errors": errors, "warnings": warnings}))
-        return
-
-    plugins = extract_plugins(data)
-
-    for name, info in plugins.items():
-        prefix = f"[{name}]"
-        git = info.get("git", {})
-        src = info.get("src", {})
-
-        # Must have exactly one of git or src
-        has_git = bool(git)
-        has_src = bool(src)
-        if not has_git and not has_src:
-            errors.append(f"{prefix}: Must have either 'git' or 'src' section")
-        elif has_git and has_src:
-            errors.append(f"{prefix}: Cannot have both 'git' and 'src' sections")
-
-        if has_git:
-            if not git.get("repo"):
-                errors.append(f"{prefix}: Missing git.repo")
-            elif not git["repo"].endswith(".git"):
-                warnings.append(f"{prefix}: git.repo should end with '.git'")
-
-            commit = git.get("commit", "")
-            if not commit:
-                errors.append(f"{prefix}: Missing git.commit")
-            elif len(commit) != 40:
-                errors.append(
-                    f"{prefix}: git.commit should be a full 40-char SHA, "
-                    f"got {len(commit)} chars"
-                )
-
-        if has_src:
-            if not src.get("url"):
-                errors.append(f"{prefix}: Missing src.url")
-            if not src.get("sha256"):
-                errors.append(f"{prefix}: Missing src.sha256")
-
-        # Validate optional fields
-        plugin_type = info.get("plugin-type", "pypkg")
-        if plugin_type not in ("pypkg", "pyscript"):
-            errors.append(
-                f"{prefix}: plugin-type must be 'pypkg' or 'pyscript', "
-                f"got '{plugin_type}'"
-            )
-
-        metadata = info.get("metadata", "pyproject.toml")
-        if metadata not in ("pyproject.toml", "avogadro.toml"):
-            errors.append(
-                f"{prefix}: metadata must be 'pyproject.toml' or 'avogadro.toml', "
-                f"got '{metadata}'"
-            )
-
-        path_val = info.get("path", ".")
-        if "\\" in path_val:
-            errors.append(f"{prefix}: path should use '/' separators, not '\\'")
-
-    result = {
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "plugin_count": len(plugins),
-    }
-    print(json.dumps(result, indent=2))
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Parse repositories.toml and provide plugin information "
         "for GitHub Actions."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    subparsers.add_parser("list", help="List all plugins as JSON")
 
     subparsers.add_parser(
         "check-updates",
@@ -274,23 +174,12 @@ def main():
     diff_parser.add_argument("base_file", help="Base repositories.toml file")
     diff_parser.add_argument("head_file", help="Head repositories.toml file")
 
-    validate_parser = subparsers.add_parser(
-        "validate", help="Validate the TOML structure"
-    )
-    validate_parser.add_argument(
-        "file", nargs="?", default=TOML_PATH, help="Path to TOML file to validate"
-    )
-
     args = parser.parse_args()
 
-    if args.command == "list":
-        cmd_list()
-    elif args.command == "check-updates":
+    if args.command == "check-updates":
         cmd_check_updates()
     elif args.command == "diff":
         cmd_diff(args.base_file, args.head_file)
-    elif args.command == "validate":
-        cmd_validate(args.file)
 
 
 if __name__ == "__main__":

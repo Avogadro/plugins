@@ -396,7 +396,7 @@ def get_metadata_all(repos: dict[str, dict], gh: Github, strict: bool) -> list[d
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate plugin index")
-    parser.add_argument("--token", "-t", help="GitHub personal access token")
+    parser.add_argument("--token", "-t", help="GitHub access token")
     parser.add_argument(
         "--pretty", action="store_true", help="Pretty-print JSON output"
     )
