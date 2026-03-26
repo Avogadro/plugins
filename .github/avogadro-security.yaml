@@ -1,0 +1,159 @@
+rules:
+  # ── Code execution / injection ──
+  - id: avogadro-eval-exec
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: compile(..., ..., "exec")
+    message: >
+      eval()/exec()/compile() found. These allow arbitrary code execution
+      and are almost never needed in Avogadro plugins. Use structured data
+      processing (JSON, etc.) instead.
+    severity: ERROR
+    languages: [python]
+
+  - id: avogadro-dynamic-import
+    patterns:
+      - pattern-either:
+          - pattern: __import__(...)
+          - pattern: importlib.import_module(...)
+    message: >
+      Dynamic import detected. Plugins should use standard imports.
+      If loading optional dependencies, use try/except around normal imports.
+    severity: WARNING
+    languages: [python]
+
+  # ── Deserialization ──
+  - id: avogadro-unsafe-deserialization
+    patterns:
+      - pattern-either:
+          - pattern: pickle.load(...)
+          - pattern: pickle.loads(...)
+          - pattern: _pickle.load(...)
+          - pattern: marshal.load(...)
+          - pattern: marshal.loads(...)
+          - pattern: yaml.load(...) # without Loader=SafeLoader
+          - pattern: shelve.open(...)
+    message: >
+      Unsafe deserialization can execute arbitrary code. Use JSON or
+      other safe formats. If YAML is needed, use yaml.safe_load().
+    severity: ERROR
+    languages: [python]
+
+  # ── Subprocess calls ──
+  - id: avogadro-subprocess-shell
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+          - pattern: os.system(...)
+          - pattern: os.popen(...)
+    message: >
+      Shell command execution detected. Prefer subprocess with shell=False
+      and explicit argument lists. os.system() and os.popen() should never
+      be used.
+    severity: ERROR
+    languages: [python]
+
+  - id: avogadro-subprocess-review
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.call(...)
+          - pattern: subprocess.run(...)
+          - pattern: subprocess.Popen(...)
+          - pattern: subprocess.check_output(...)
+          - pattern: subprocess.check_call(...)
+    message: >
+      Subprocess call detected. This is often legitimate for plugins that
+      wrap external tools (ORCA, Gaussian, xtb, etc.), but verify the
+      command is not constructed from untrusted input.
+    severity: WARNING
+    languages: [python]
+
+  # ── Network access ──
+  - id: avogadro-network-access
+    patterns:
+      - pattern-either:
+          - pattern: requests.get(...)
+          - pattern: requests.post(...)
+          - pattern: requests.put(...)
+          - pattern: requests.delete(...)
+          - pattern: urllib.request.urlopen(...)
+          - pattern: http.client.HTTPConnection(...)
+          - pattern: http.client.HTTPSConnection(...)
+          - pattern: socket.socket(...)
+    message: >
+      Network access detected. Verify the plugin genuinely needs network
+      access and that URLs are not constructed from untrusted input.
+    severity: WARNING
+    languages: [python]
+
+  # ── File system operations ──
+  - id: avogadro-dangerous-file-ops
+    patterns:
+      - pattern-either:
+          - pattern: shutil.rmtree(...)
+          - pattern: os.removedirs(...)
+          - pattern: pathlib.Path(...).unlink(...)
+    message: >
+      Destructive file operations detected. Verify paths are restricted
+      to the plugin's working directory.
+    severity: WARNING
+    languages: [python]
+
+  - id: avogadro-path-traversal
+    patterns:
+      - pattern-either:
+          - pattern: open($PATH + ..., ...)
+          - pattern: open(f"...{$VAR}...", ...)
+          - pattern: os.path.join(..., $USER_INPUT, ...)
+    message: >
+      Possible path traversal — file paths should be validated to prevent
+      accessing files outside the intended directory.
+    severity: WARNING
+    languages: [python]
+
+  # ── Credentials and secrets ──
+  - id: avogadro-hardcoded-secret
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "sk-..."
+          - pattern: $VAR = "api_key_..."
+          - pattern: |
+              password = "..."
+          - pattern: |
+              token = "..."
+          - pattern: |
+              secret = "..."
+          - pattern: |
+              api_key = "..."
+    message: >
+      Possible hardcoded credential. Use environment variables or
+      Avogadro's configuration system for secrets.
+    severity: ERROR
+    languages: [python]
+
+  # ── Native code / FFI ──
+  - id: avogadro-native-code
+    patterns:
+      - pattern-either:
+          - pattern: ctypes.cdll.LoadLibrary(...)
+          - pattern: ctypes.CDLL(...)
+          - pattern: cffi.FFI()
+    message: >
+      Native code loading via ctypes/cffi. This bypasses Python's safety
+      features and requires careful review.
+    severity: ERROR
+    languages: [python]
+
+  # ── Avogadro-specific best practices ──
+  - id: avogadro-stderr-for-progress
+    patterns:
+      - pattern: print(...) # in the context of a plugin script
+    message: >
+      Avogadro plugin scripts communicate via stdout (JSON). Use
+      sys.stderr.write() for progress messages, not print().
+    severity: INFO
+    languages: [python]

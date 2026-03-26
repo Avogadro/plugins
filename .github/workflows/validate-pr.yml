@@ -1,6 +1,7 @@
 # .github/workflows/validate-pr.yml
 #
 # Runs on every PR that touches repositories.toml.
+# Can also be triggered manually by commenting "/validate" on a PR.
 # Ensures:
 #   1. The TOML is valid and well-structured
 #   2. Only one plugin is added or modified per PR
@@ -13,6 +14,8 @@ on:
   pull_request:
     paths:
       - "repositories.toml"
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -21,17 +24,43 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    # Run on PR events, or on "/validate" comments on PRs
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/validate'))
     steps:
+      - name: Get PR details
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            pr_number="${{ github.event.issue.number }}"
+            echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+            # Fetch PR refs via the GitHub API
+            pr_data=$(gh api repos/${{ github.repository }}/pulls/$pr_number)
+            head_sha=$(echo "$pr_data" | jq -r '.head.sha')
+            base_sha=$(echo "$pr_data" | jq -r '.base.sha')
+            echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout PR head
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ steps.pr.outputs.head_sha }}
           path: head
 
       - name: Checkout base branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ steps.pr.outputs.base_sha }}
           path: base
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -142,7 +171,7 @@ jobs:
 
           See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
 
-          gh pr comment ${{ github.event.pull_request.number }} --body "$comment"
+          gh pr comment ${{ steps.pr.outputs.number }} --body "$comment"
 
       # ── Final: fail the job if any check failed ──
       - name: Fail on validation errors
