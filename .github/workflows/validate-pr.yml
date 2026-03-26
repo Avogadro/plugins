@@ -19,17 +19,21 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     # Run on PR events, or on "/validate" comments on PRs
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
-       contains(github.event.comment.body, '/validate'))
+       startsWith(github.event.comment.body, '/validate') &&
+       contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+
     steps:
       - name: Get PR details
         id: pr
@@ -56,25 +60,30 @@ jobs:
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
           path: head
+          persist-credentials: false
 
       - name: Checkout base branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.pr.outputs.base_sha }}
           path: base
+          persist-credentials: false
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
 
-      - name: Copy helper scripts
-        run: cp head/scripts/parse_plugins.py head/scripts/plugin_validation.py .
+      - name: Prepare trusted helper scripts
+        run: |
+          mkdir trusted
+          cp base/scripts/parse_plugins.py base/scripts/plugin_validation.py base/scripts/generate_index.py trusted/
+          cp head/repositories.toml trusted/repositories.toml
 
       # ── Step 1: Diff to find what changed ──
       - name: Detect plugin changes
         id: diff
         run: |
-          diff_result=$(python parse_plugins.py diff base/repositories.toml head/repositories.toml)
+          diff_result=$(python3 trusted/parse_plugins.py diff base/repositories.toml head/repositories.toml)
           echo "$diff_result" | python3 -c "
           import json, sys, os
           d = json.load(sys.stdin)
@@ -82,7 +91,7 @@ jobs:
           modified = len(d['modified'])
           removed = len(d['removed'])
           total = d['total_changes']
-          changed = ' '.join(p['name'] for p in d['added'] + d['modified'])
+          changed = [p['name'] for p in d['added'] + d['modified']]
 
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('### Plugin Changes\n')
@@ -96,25 +105,41 @@ jobs:
               out.write(f'added={added}\n')
               out.write(f'modified={modified}\n')
               out.write(f'removed={removed}\n')
-              out.write(f'changed={changed}\n')
+              out.write(f'changed_json={json.dumps(changed, separators=(\",\", \":\"))}\n')
           "
           echo "diff_json=$(echo "$diff_result" | jq -c .)" >> "$GITHUB_OUTPUT"
 
       # ── Step 2: Validate changed plugin metadata ──
       - name: Install dependencies
-        run: pip install PyGitHub
+        run: python3 -m pip install --disable-pip-version-check "PyGitHub==2.1.1"
 
       - name: Validate plugin metadata
         id: validate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGED_JSON: ${{ steps.diff.outputs.changed_json }}
         run: |
           echo "### Plugin Validation" >> "$GITHUB_STEP_SUMMARY"
-          changed="${{ steps.diff.outputs.changed }}"
-          if [ -z "$changed" ]; then
+          if [ "$CHANGED_JSON" = "[]" ]; then
             echo "✅ No added/modified plugins to validate." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
-          elif python head/scripts/generate_index.py -t "$GH_TOKEN" --strict -p $changed; then
+            exit 0
+          fi
+
+          changed_plugins=()
+          while IFS= read -r plugin_name; do
+            changed_plugins+=("$plugin_name")
+          done < <(
+            python3 - <<'PY'
+          import json
+          import os
+
+          for name in json.loads(os.environ["CHANGED_JSON"]):
+              print(name)
+          PY
+          )
+
+          if python3 trusted/generate_index.py -t "$GH_TOKEN" --strict -p "${changed_plugins[@]}"; then
             echo "✅ All changed plugins validated successfully." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
           else
@@ -160,18 +185,33 @@ jobs:
             status="❌ Some validation checks failed"
           fi
 
-          comment="## Plugin PR Validation
+          {
+            echo "<!-- validate-pr-report -->"
+            echo ""
+            echo "## Plugin PR Validation"
+            echo ""
+            echo "${status}"
+            echo ""
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            echo "| TOML structure | $([ "$toml_ok" = "true" ] && echo "✅ Valid" || echo "❌ Invalid") |"
+            echo "| Single plugin rule | $([ "$single_ok" = "true" ] && echo "✅ Pass ($total change)" || echo "❌ Fail ($total changes)") |"
+            echo ""
+            echo "See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+          } > comment.md
 
-          ${status}
+          comment_id=$(gh api repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/comments \
+            --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- validate-pr-report -->"))) | .id' \
+            | tail -n 1)
 
-          | Check | Result |
-          |-------|--------|
-          | TOML structure | $([ "$toml_ok" = "true" ] && echo "✅ Valid" || echo "❌ Invalid") |
-          | Single plugin rule | $([ "$single_ok" = "true" ] && echo "✅ Pass ($total change)" || echo "❌ Fail ($total changes)") |
-
-          See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
-
-          gh pr comment ${{ steps.pr.outputs.number }} --body "$comment"
+          if [ -n "$comment_id" ]; then
+            body=$(cat comment.md)
+            gh api --method PATCH repos/${{ github.repository }}/issues/comments/"$comment_id" \
+              --raw-field body="$body" >/dev/null
+          else
+            gh pr comment ${{ steps.pr.outputs.number }} --body-file comment.md
+          fi
 
       # ── Final: fail the job if any check failed ──
       - name: Fail on validation errors
