@@ -210,7 +210,9 @@ jobs:
             gh api --method PATCH repos/${{ github.repository }}/issues/comments/"$comment_id" \
               --raw-field body="$body" >/dev/null
           else
-            gh pr comment ${{ steps.pr.outputs.number }} --body-file comment.md
+            gh pr comment ${{ steps.pr.outputs.number }} \
+              --repo "${{ github.repository }}" \
+              --body-file comment.md
           fi
 
       # ── Final: fail the job if any check failed ──

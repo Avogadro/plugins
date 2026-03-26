@@ -224,6 +224,14 @@ def extract_dependencies(src_dir: Path, requirements_out: Path) -> dict:
 
         for group_name, deps in data.get("dependency-groups", {}).items():
             for dep in deps:
+                if isinstance(dep, dict):
+                    dynamic_sources.append(
+                        {
+                            "file": str(pyproject),
+                            "reason": f"dependency group {group_name} contains a non-string item and was not expanded",
+                        }
+                    )
+                    continue
                 if _is_non_pypi(dep):
                     non_pypi.append(
                         {
