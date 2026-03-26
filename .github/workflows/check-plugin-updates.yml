@@ -37,7 +37,7 @@ jobs:
       - name: Detect upstream updates
         id: detect
         run: |
-          updates=$(python .github/scripts/parse_plugins.py check-updates)
+          updates=$(python scripts/parse_plugins.py check-updates)
           echo "Raw updates: $updates"
 
           # If a specific plugin was requested, filter to just that one
