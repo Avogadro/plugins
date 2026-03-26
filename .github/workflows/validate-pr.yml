@@ -85,7 +85,7 @@ jobs:
           if [ -z "$changed" ]; then
             echo "✅ No added/modified plugins to validate." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
-          elif python head/generate_index.py -t "$GH_TOKEN" --strict -p $changed; then
+          elif python head/scripts/generate_index.py -t "$GH_TOKEN" --strict -p $changed; then
             echo "✅ All changed plugins validated successfully." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
           else
