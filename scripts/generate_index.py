@@ -414,13 +414,20 @@ if __name__ == "__main__":
         nargs="+",
         help="Fetch and validate the metadata for only the given plugins",
     )
+    parser.add_argument(
+        "repos_file",
+        nargs="?",
+        default=Path(__file__).with_name("repositories.toml"),
+        type=Path,
+        help="Path to repositories.toml (default: next to this script)",
+    )
     args = parser.parse_args()
 
     auth = Auth.Token(args.token) if args.token else None
 
     gh = Github(auth=auth)
 
-    repos_file = Path(__file__).with_name("repositories.toml")
+    repos_file = args.repos_file
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
     if args.plugins:
