@@ -127,5 +127,5 @@ git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
 
 [crest]
 git.repo = "https://github.com/matterhorn103/avogadro-crest"
-git.commit = "de7413bc8e890fca91dfd8befb7ce507cf5a3d06"
-release-tag = "0.1.0"
+git.commit = "4ac0a3135fc62e6e5c3d04a56a6b828a0050936e"
+release-tag = "0.1.1"
