@@ -1,0 +1,652 @@
+# .github/workflows/security-scan.yml
+#
+# Triggered by PRs that touch repositories.toml, or by commenting "/security"
+# on a PR.
+# For each added or modified plugin:
+#   1. Clones the plugin repo at the specified commit
+#   2. Runs Bandit (Python security linter)
+#   3. Runs Semgrep with community + custom rules
+#   4. Runs pip-audit on declared dependencies
+#   5. Checks for dangerous patterns (subprocess, eval, network, etc.)
+#   6. Generates a structured security report as a PR comment
+
+name: Security Scan
+
+on:
+  pull_request:
+    paths:
+      - "repositories.toml"
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  # ────────────────────────────────────────────
+  # Phase 1: Identify which plugins changed
+  # ────────────────────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    # Run on PR events, or on "/security" comments on PRs
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/security') &&
+       contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    outputs:
+      plugins: ${{ steps.diff.outputs.plugins }}
+      count: ${{ steps.diff.outputs.count }}
+      pr_number: ${{ steps.pr.outputs.number }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+    steps:
+      - name: Get PR details
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            pr_number="${{ github.event.issue.number }}"
+            echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+            pr_data=$(gh api repos/${{ github.repository }}/pulls/$pr_number)
+            head_sha=$(echo "$pr_data" | jq -r '.head.sha')
+            base_sha=$(echo "$pr_data" | jq -r '.base.sha')
+            echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout PR head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          path: head
+          persist-credentials: false
+
+      - name: Checkout base branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.pr.outputs.base_sha }}
+          path: base
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Identify changed plugins
+        id: diff
+        run: |
+          diff_result=$(python3 base/scripts/parse_plugins.py diff \
+            base/repositories.toml head/repositories.toml)
+
+          # Build a matrix of plugins that need scanning (added + modified)
+          plugins=$(echo "$diff_result" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          scan_list = []
+          for p in d['added']:
+              scan_list.append({
+                  'name': p['name'],
+                  'repo': p['repo'],
+                  'commit': p['commit'],
+                  'path': p.get('path', '.'),
+                  'plugin_type': p.get('plugin_type', 'pypkg'),
+                  'change_type': 'added'
+              })
+          for p in d['modified']:
+              if p.get('new_commit'):
+                  scan_list.append({
+                      'name': p['name'],
+                      'repo': p['repo'],
+                      'commit': p['new_commit'],
+                      'path': p.get('path', '.'),
+                      'plugin_type': p.get('plugin_type', 'pypkg'),
+                      'change_type': 'modified'
+                  })
+          print(json.dumps(scan_list))
+          ")
+
+          count=$(echo "$plugins" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
+          echo "plugins=$(echo "$plugins" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+  # ────────────────────────────────────────────
+  # Phase 2: Scan each plugin (parallel matrix)
+  # ────────────────────────────────────────────
+  scan-plugin:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.count != '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJson(needs.detect-changes.outputs.plugins) }}
+    steps:
+      - name: Checkout trusted repo contents
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.detect-changes.outputs.base_sha }}
+          path: _this
+          persist-credentials: false
+
+      - name: Clone plugin at pinned commit
+        run: |
+          git clone "${{ matrix.plugin.repo }}" plugin-src
+          cd plugin-src
+          git checkout "${{ matrix.plugin.commit }}"
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Resolve scan directory
+        id: src
+        run: |
+          repo_root=$(python3 -c "import os; print(os.path.realpath('plugin-src'))")
+          candidate=$(python3 -c "import os, sys; print(os.path.realpath(os.path.join('plugin-src', sys.argv[1])))" "${{ matrix.plugin.path }}")
+
+          case "$candidate" in
+            "$repo_root"|"$repo_root"/*)
+              if [ ! -d "$candidate" ]; then
+                echo "::error::Configured plugin path does not exist: ${{ matrix.plugin.path }}"
+                exit 1
+              fi
+              echo "src_dir=$candidate" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Configured plugin path escapes the cloned repository: ${{ matrix.plugin.path }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Install scanning tools
+        run: |
+          python3 -m pip install --disable-pip-version-check bandit pip-audit semgrep
+
+      # ── Scan 1: Bandit (Python security linter) ──
+      - name: Run Bandit
+        id: bandit
+        continue-on-error: true
+        run: |
+          src="${{ steps.src.outputs.src_dir }}"
+          echo "### Bandit Results" > bandit-report.md
+
+          set +e
+          bandit -r "$src" \
+            -f json \
+            -ll \
+            --exclude '**/test*,**/.git' \
+            -o bandit-results.json 2>/dev/null
+          bandit_status=$?
+          set -e
+
+          if [ ! -f bandit-results.json ]; then
+            echo '{"results":[]}' > bandit-results.json
+          fi
+
+          BANDIT_STATUS="$bandit_status" python3 - <<'PY'
+          import json
+          import os
+
+          with open("bandit-results.json", encoding="utf-8") as f:
+              data = json.load(f)
+
+          results = data.get("results", [])
+          high = [r for r in results if r.get("issue_severity") == "HIGH"]
+          medium = [r for r in results if r.get("issue_severity") == "MEDIUM"]
+          low = [r for r in results if r.get("issue_severity") == "LOW"]
+
+          with open("bandit-report.md", "w", encoding="utf-8") as f:
+              f.write("### 🔍 Bandit (Python Security Linter)\n\n")
+              if not results:
+                  f.write("✅ No issues found.\n")
+              else:
+                  f.write("| Severity | Count |\n")
+                  f.write("|----------|-------|\n")
+                  f.write(f"| 🔴 High | {len(high)} |\n")
+                  f.write(f"| 🟡 Medium | {len(medium)} |\n")
+                  f.write(f"| 🟢 Low | {len(low)} |\n\n")
+
+                  if high or medium:
+                      f.write("<details><summary>Details (high/medium)</summary>\n\n")
+                      for result in high + medium:
+                          f.write(
+                              f"- **{result['issue_severity']}**: {result['issue_text']}\n"
+                              f"  - File: `{result['filename']}:{result['line_number']}`\n"
+                              f"  - CWE: {result.get('issue_cwe', {}).get('id', 'N/A')}\n"
+                              f"  - Test: {result['test_id']}\n"
+                          )
+                      f.write("\n</details>\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"high_count={len(high)}\n")
+              tool_error = os.environ["BANDIT_STATUS"] not in {"0", "1"}
+              out.write(f"tool_error={'true' if tool_error else 'false'}\n")
+
+          raise SystemExit(1 if high or tool_error else 0)
+          PY
+
+      # ── Scan 2: Dangerous pattern grep ──
+      - name: Check for dangerous patterns
+        id: patterns
+        run: |
+          src="${{ steps.src.outputs.src_dir }}"
+          echo "### 🔎 Dangerous Pattern Check" > patterns-report.md
+
+          found_critical=false
+          found_review=false
+
+          # ── Critical patterns (almost always bad in plugins) ──
+          echo "" >> patterns-report.md
+          echo "#### Critical Patterns" >> patterns-report.md
+
+          declare -A critical_patterns
+          critical_patterns=(
+            ["eval("]="eval() — arbitrary code execution"
+            ["exec("]="exec() — arbitrary code execution"
+            ["compile("]="compile() — dynamic code compilation"
+            ["__import__"]="__import__() — dynamic import (bypass restrictions)"
+            ["importlib"]="importlib — dynamic module loading"
+            ["pickle.load"]="pickle.loads — unsafe deserialization"
+            ["marshal.load"]="marshal — unsafe deserialization"
+            ["shelve.open"]="shelve — pickle-backed storage"
+            ["os.system("]="os.system() — shell command execution"
+            ["ctypes"]="ctypes — native code access"
+            ["cffi"]="cffi — native code access"
+          )
+
+          for pattern in "${!critical_patterns[@]}"; do
+            desc="${critical_patterns[$pattern]}"
+            matches=$(grep -rn --include="*.py" "$pattern" "$src" 2>/dev/null | head -5 || true)
+            if [ -n "$matches" ]; then
+              found_critical=true
+              echo "" >> patterns-report.md
+              echo "🔴 **$desc**" >> patterns-report.md
+              echo '```' >> patterns-report.md
+              echo "$matches" >> patterns-report.md
+              echo '```' >> patterns-report.md
+            fi
+          done
+
+          if [ "$found_critical" = "false" ]; then
+            echo "✅ No critical patterns found." >> patterns-report.md
+          fi
+
+          # ── Review patterns (legitimate but need human eyes) ──
+          echo "" >> patterns-report.md
+          echo "#### Patterns Requiring Review" >> patterns-report.md
+
+          declare -A review_patterns
+          review_patterns=(
+            ["subprocess"]="subprocess — runs external programs"
+            ["requests."]="requests library — network access"
+            ["urllib"]="urllib — network access"
+            ["http.client"]="http.client — network access"
+            ["socket"]="socket — raw network access"
+            ["open("]="file I/O — check paths are safe"
+            ["shutil.rmtree"]="shutil.rmtree — recursive deletion"
+            ["os.remove"]="os.remove — file deletion"
+            ["tempfile"]="tempfile — temp file creation"
+            ["webbrowser"]="webbrowser — opens URLs in browser"
+          )
+
+          for pattern in "${!review_patterns[@]}"; do
+            desc="${review_patterns[$pattern]}"
+            matches=$(grep -rn --include="*.py" "$pattern" "$src" 2>/dev/null | \
+              grep -v "^Binary" | head -3 || true)
+            if [ -n "$matches" ]; then
+              found_review=true
+              echo "" >> patterns-report.md
+              echo "🟡 **$desc**" >> patterns-report.md
+              echo '```' >> patterns-report.md
+              echo "$matches" >> patterns-report.md
+              echo '```' >> patterns-report.md
+            fi
+          done
+
+          if [ "$found_review" = "false" ]; then
+            echo "✅ No review-worthy patterns found." >> patterns-report.md
+          fi
+
+          echo "critical=$found_critical" >> "$GITHUB_OUTPUT"
+          echo "review=$found_review" >> "$GITHUB_OUTPUT"
+
+      # ── Scan 3: Semgrep (community + custom rules) ──
+      - name: Run Semgrep
+        id: semgrep
+        continue-on-error: true
+        run: |
+          src="${{ steps.src.outputs.src_dir }}"
+          echo "### 🛡️ Semgrep Analysis" > semgrep-report.md
+
+          set +e
+          semgrep scan \
+            --config "p/python" \
+            --config "p/security-audit" \
+            --config "p/secrets" \
+            --json \
+            --output semgrep-results.json \
+            "$src" 2>/dev/null
+          semgrep_status=$?
+
+          if [ -f "_this/.github/avogadro-security.yaml" ]; then
+            semgrep scan \
+              --config "_this/.github/avogadro-security.yaml" \
+              --json \
+              --output semgrep-custom-results.json \
+              "$src" 2>/dev/null
+            custom_status=$?
+          else
+            custom_status=0
+          fi
+          set -e
+
+          if [ ! -f semgrep-results.json ]; then
+            echo '{"results":[]}' > semgrep-results.json
+          fi
+
+          SEMGREP_STATUS="$semgrep_status" CUSTOM_STATUS="$custom_status" python3 - <<'PY'
+          import json
+          import os
+
+          severity_order = {"NONE": 0, "INFO": 1, "WARNING": 2, "ERROR": 3}
+          all_results = []
+          max_severity = "NONE"
+
+          for fname in ["semgrep-results.json", "semgrep-custom-results.json"]:
+              if not os.path.exists(fname):
+                  continue
+              with open(fname, encoding="utf-8") as f:
+                  data = json.load(f)
+              for result in data.get("results", []):
+                  severity = result.get("extra", {}).get("severity", "INFO")
+                  all_results.append(result)
+                  if severity_order.get(severity, 0) > severity_order[max_severity]:
+                      max_severity = severity
+
+          with open("semgrep-report.md", "w", encoding="utf-8") as f:
+              f.write("### 🛡️ Semgrep Analysis\n\n")
+              if not all_results:
+                  f.write("✅ No issues found.\n")
+              else:
+                  by_severity = {}
+                  for result in all_results:
+                      sev = result.get("extra", {}).get("severity", "INFO")
+                      by_severity.setdefault(sev, []).append(result)
+
+                  f.write(f"Found **{len(all_results)}** issue(s):\n\n")
+                  f.write("| Severity | Count |\n")
+                  f.write("|----------|-------|\n")
+                  for sev in ["ERROR", "WARNING", "INFO"]:
+                      items = by_severity.get(sev, [])
+                      if items:
+                          icon = {"ERROR": "🔴", "WARNING": "🟡", "INFO": "ℹ️"}.get(sev, "⚪")
+                          f.write(f"| {icon} {sev} | {len(items)} |\n")
+
+                  f.write("\n<details><summary>Issue details</summary>\n\n")
+                  for result in all_results:
+                      sev = result.get("extra", {}).get("severity", "INFO")
+                      msg = result.get("extra", {}).get("message", "No message")
+                      path = result.get("path", "?")
+                      line = result.get("start", {}).get("line", "?")
+                      rule = result.get("check_id", "?")
+                      f.write(f"- **[{sev}]** `{path}:{line}` - {msg} ({rule})\n")
+                  f.write("\n</details>\n")
+
+          tool_error = "true" if os.environ["SEMGREP_STATUS"] not in {"0", "1"} or os.environ["CUSTOM_STATUS"] not in {"0", "1"} else "false"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"max_severity={max_severity}\n")
+              out.write(f"tool_error={tool_error}\n")
+          PY
+
+      # ── Scan 4: Dependency audit ──
+      - name: Audit dependencies
+        id: deps
+        continue-on-error: true
+        run: |
+          src="${{ steps.src.outputs.src_dir }}"
+          echo "### 📦 Dependency Audit" > deps-report.md
+
+          python3 _this/scripts/security_scan_helpers.py extract-deps "$src" extracted-requirements.txt > deps-summary.json
+
+          python3 - <<'PY'
+          import json
+
+          with open("deps-summary.json", encoding="utf-8") as f:
+              summary = json.load(f)
+
+          with open("deps-report.md", "a", encoding="utf-8") as report:
+              files = summary.get("dependency_files", [])
+              if files:
+                  report.write("Dependency files:\n")
+                  for path in files:
+                      report.write(f"- `{path}`\n")
+                  report.write("\n")
+              else:
+                  report.write("ℹ️ No dependency file found (pyproject.toml, requirements.txt, setup.py).\n")
+
+              if summary.get("dynamic_sources"):
+                  report.write("#### Manual Review Needed\n")
+                  for item in summary["dynamic_sources"]:
+                      report.write(f"- `{item['file']}`: {item['reason']}\n")
+                  report.write("\n")
+
+              if summary.get("non_pypi"):
+                  report.write("#### Dependency Source Check\n")
+                  report.write("⚠️ **Non-PyPI dependency sources found** (review carefully):\n")
+                  for item in summary["non_pypi"]:
+                      report.write(f"- `{item['source']}`: `{item['dependency']}` ({item['reason']})\n")
+                  report.write("\n")
+              else:
+                  report.write("#### Dependency Source Check\n")
+                  report.write("✅ No non-PyPI dependency sources detected in static dependency files.\n\n")
+          PY
+
+          if [ ! -s extracted-requirements.txt ]; then
+            echo "#### pip-audit" >> deps-report.md
+            echo "ℹ️ No statically auditable dependencies found." >> deps-report.md
+            echo "vuln_count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "#### pip-audit" >> deps-report.md
+          set +e
+          pip-audit -r extracted-requirements.txt --format json --output pip-audit.json 2>/dev/null
+          audit_status=$?
+          set -e
+
+          if [ -f "pip-audit.json" ]; then
+            python3 - <<'PY' > /tmp/vuln_count
+          import json
+
+          with open("pip-audit.json", encoding="utf-8") as f:
+              data = json.load(f)
+
+          deps = data if isinstance(data, list) else data.get("dependencies", [])
+          vulns = [dep for dep in deps if dep.get("vulns")]
+
+          with open("deps-report.md", "a", encoding="utf-8") as report:
+              if not vulns:
+                  report.write("✅ No known vulnerabilities in dependencies.\n")
+              else:
+                  report.write(f"⚠️ **{len(vulns)} package(s) with known vulnerabilities:**\n\n")
+                  for dep in vulns:
+                      report.write(f"- **{dep['name']}** {dep.get('version', '?')}:\n")
+                      for vuln in dep["vulns"]:
+                          description = vuln.get("description", "N/A").replace("\n", " ")[:100]
+                          report.write(f"  - {vuln.get('id', '?')}: {description}\n")
+
+          print(len(vulns))
+          PY
+            echo "vuln_count=$(cat /tmp/vuln_count)" >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ Could not run pip-audit." >> deps-report.md
+            echo "vuln_count=0" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$audit_status" -ne 0 ] && [ "$audit_status" -ne 1 ]; then
+            echo "audit_error=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "audit_error=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Scan 5: Code metrics & overview ──
+      - name: Code overview
+        run: |
+          src="${{ steps.src.outputs.src_dir }}"
+          echo "### 📊 Code Overview" > overview-report.md
+
+          # Count Python files and lines
+          py_files=$(find "$src" -name "*.py" -not -path "*/.git/*" | wc -l)
+          py_lines=$(find "$src" -name "*.py" -not -path "*/.git/*" -exec cat {} + 2>/dev/null | wc -l)
+
+          echo "| Metric | Value |" >> overview-report.md
+          echo "|--------|-------|" >> overview-report.md
+          echo "| Python files | $py_files |" >> overview-report.md
+          echo "| Total Python lines | $py_lines |" >> overview-report.md
+          echo "| Plugin type | ${{ matrix.plugin.plugin_type }} |" >> overview-report.md
+          echo "| Change type | ${{ matrix.plugin.change_type }} |" >> overview-report.md
+
+          # List all Python files for reviewer reference
+          echo "" >> overview-report.md
+          echo "<details><summary>Python files</summary>" >> overview-report.md
+          echo "" >> overview-report.md
+          find "$src" -name "*.py" -not -path "*/.git/*" | sort | while read f; do
+            lines=$(wc -l < "$f")
+            echo "- \`$f\` ($lines lines)" >> overview-report.md
+          done
+          echo "" >> overview-report.md
+          echo "</details>" >> overview-report.md
+
+      # ── Upload all reports ──
+      - name: Combine reports
+        id: report
+        run: |
+          {
+            echo "## 🔐 Security Scan: \`${{ matrix.plugin.name }}\`"
+            echo ""
+            echo "**Repository:** ${{ matrix.plugin.repo }}"
+            echo "**Commit:** \`${{ matrix.plugin.commit }}\`"
+            echo "**Change type:** ${{ matrix.plugin.change_type }}"
+            echo ""
+            echo "---"
+            echo ""
+            cat overview-report.md
+            echo ""
+            echo "---"
+            echo ""
+            cat bandit-report.md
+            echo ""
+            echo "---"
+            echo ""
+            cat patterns-report.md
+            echo ""
+            echo "---"
+            echo ""
+            cat semgrep-report.md
+            echo ""
+            echo "---"
+            echo ""
+            cat deps-report.md
+          } > full-report.md
+
+          # Determine overall risk level
+          bandit_fail="${{ steps.bandit.outcome == 'failure' && 'true' || 'false' }}"
+          critical="${{ steps.patterns.outputs.critical }}"
+          vuln_count="${{ steps.deps.outputs.vuln_count }}"
+          semgrep_max="${{ steps.semgrep.outputs.max_severity }}"
+          semgrep_error="${{ steps.semgrep.outputs.tool_error }}"
+          audit_error="${{ steps.deps.outputs.audit_error }}"
+
+          if [ "$critical" = "true" ] || [ "$bandit_fail" = "true" ] || [ "$semgrep_max" = "ERROR" ]; then
+            echo "risk=HIGH" >> "$GITHUB_OUTPUT"
+          elif [ "${vuln_count:-0}" -gt 0 ] || [ "${{ steps.patterns.outputs.review }}" = "true" ] || [ "$semgrep_max" = "WARNING" ] || [ "$semgrep_error" = "true" ] || [ "$audit_error" = "true" ]; then
+            echo "risk=MEDIUM" >> "$GITHUB_OUTPUT"
+          else
+            echo "risk=LOW" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: security-report-${{ matrix.plugin.name }}
+          if-no-files-found: warn
+          path: |
+            full-report.md
+            bandit-results.json
+            semgrep-results.json
+
+  # ────────────────────────────────────────────
+  # Phase 3: Post combined results to the PR
+  # ────────────────────────────────────────────
+  post-results:
+    needs: [detect-changes, scan-plugin]
+    if: always() && needs.detect-changes.outputs.count != '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download all scan reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: security-report-*
+
+      - name: Post combined PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "<!-- security-scan-report -->"
+            echo ""
+            echo "# 🔐 Plugin Security Scan Results"
+            echo ""
+            echo "Scanned **${{ needs.detect-changes.outputs.count }}** plugin(s)."
+            echo ""
+
+            # Concatenate all reports
+            for dir in security-report-*/; do
+              if [ -f "${dir}full-report.md" ]; then
+                cat "${dir}full-report.md"
+                echo ""
+                echo "---"
+                echo ""
+              fi
+            done
+
+            echo ""
+            echo "> **Note:** Automated scans supplement but do not replace manual code review."
+            echo "> Please examine the flagged items before approving this PR."
+          } > combined-comment.md
+
+          # Truncate if too long for a PR comment (65536 char limit)
+          if [ $(wc -c < combined-comment.md) -gt 60000 ]; then
+            head -c 59000 combined-comment.md > truncated.md
+            echo "" >> truncated.md
+            echo "*(Report truncated — see workflow artifacts for full details)*" >> truncated.md
+            mv truncated.md combined-comment.md
+          fi
+
+          comment_id=$(gh api repos/${{ github.repository }}/issues/${{ needs.detect-changes.outputs.pr_number }}/comments \
+            --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- security-scan-report -->"))) | .id' \
+            | tail -n 1)
+
+          if [ -n "$comment_id" ]; then
+            body=$(cat combined-comment.md)
+            gh api --method PATCH repos/${{ github.repository }}/issues/comments/"$comment_id" \
+              --raw-field body="$body" >/dev/null
+          else
+            gh pr comment ${{ needs.detect-changes.outputs.pr_number }} \
+              --repo "${{ github.repository }}" \
+              --body-file combined-comment.md
+          fi

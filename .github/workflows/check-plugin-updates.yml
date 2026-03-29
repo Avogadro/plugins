@@ -18,17 +18,20 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   check-updates:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       updates: ${{ steps.detect.outputs.updates }}
       count: ${{ steps.detect.outputs.count }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -36,19 +39,15 @@ jobs:
 
       - name: Detect upstream updates
         id: detect
+        env:
+          PLUGIN_NAME: ${{ inputs.plugin_name }}
         run: |
-          updates=$(python scripts/parse_plugins.py check-updates)
-          echo "Raw updates: $updates"
-
-          # If a specific plugin was requested, filter to just that one
-          if [ -n "${{ inputs.plugin_name }}" ]; then
-            updates=$(echo "$updates" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          filtered = [p for p in data if p['name'] == '${{ inputs.plugin_name }}']
-          print(json.dumps(filtered))
-          ")
+          if [ -n "$PLUGIN_NAME" ]; then
+            updates=$(python3 scripts/parse_plugins.py check-updates --plugin-name "$PLUGIN_NAME")
+          else
+            updates=$(python3 scripts/parse_plugins.py check-updates)
           fi
+          echo "Raw updates: $updates"
 
           count=$(echo "$updates" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
           echo "updates=$(echo "$updates" | jq -c .)" >> "$GITHUB_OUTPUT"
@@ -60,6 +59,9 @@ jobs:
     needs: check-updates
     if: needs.check-updates.outputs.count != '0'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     strategy:
       # Process one plugin at a time to avoid branch conflicts
       max-parallel: 1
@@ -125,31 +127,12 @@ jobs:
           new_commit="${{ matrix.plugin.latest_commit }}"
           latest_tag="${{ steps.commit-info.outputs.latest_tag }}"
 
-          # Replace the commit SHA
-          sed -i "s|$old_commit|$new_commit|" repositories.toml
-
-          # If we found a release tag, update or add release-tag
-          if [ -n "$latest_tag" ]; then
-            # Check if release-tag already exists for this plugin
-            if grep -A5 "^\[${plugin}\]" repositories.toml | grep -q "release-tag"; then
-              # Update existing release-tag (within the plugin's section)
-              python3 -c "
-          import re
-          with open('repositories.toml', 'r') as f:
-              content = f.read()
-          # Find the plugin section and update release-tag within it
-          pattern = r'(\[${plugin}\].*?release-tag\s*=\s*)\"[^\"]*\"'
-          content = re.sub(pattern, r'\1\"${latest_tag}\"', content, flags=re.DOTALL)
-          with open('repositories.toml', 'w') as f:
-              f.write(content)
-          "
-            else
-              # Add release-tag after the commit line
-              sed -i "/^\[${plugin}\]/,/^$\|^\[/ {
-                /git\.commit/a release-tag = \"${latest_tag}\"
-              }" repositories.toml
-            fi
-          fi
+          python3 scripts/update_plugin_entry.py \
+            repositories.toml \
+            "$plugin" \
+            "$old_commit" \
+            "$new_commit" \
+            --latest-tag "$latest_tag"
 
       - name: Create Pull Request
         if: steps.check-pr.outputs.skip == 'false'
