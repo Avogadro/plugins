@@ -66,8 +66,8 @@ git.commit = "2c3c72f2b97fc0231c2628a221c3dc519166c422"
 
 [xtb]
 git.repo = "https://github.com/matterhorn103/avo_xtb.git"
-git.commit = "2e9289d462bc8fb8bf79ba02a7435f4013ec7945"
-release-tag = "0.11.0"
+git.commit = "425500143b5a795dcd26983f5abb4183e905ff41"
+release-tag = "0.11.1"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
