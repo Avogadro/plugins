@@ -38,7 +38,7 @@ def cmd_list():
     print(json.dumps(result, indent=2))
 
 
-def cmd_check_updates():
+def cmd_check_updates(plugin_name: str | None = None):
     """
     For each git-based plugin, check if the upstream default branch
     has moved past the pinned commit. Output JSON with update info.
@@ -48,6 +48,9 @@ def cmd_check_updates():
     updates = []
 
     for name, info in plugins.items():
+        if plugin_name and name != plugin_name:
+            continue
+
         git = info.get("git", {})
         repo_url = git.get("repo", "")
         pinned_commit = git.get("commit", "")
@@ -162,9 +165,13 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser(
+    check_updates_parser = subparsers.add_parser(
         "check-updates",
         help="Check for upstream updates (new commits on default branch)",
+    )
+    check_updates_parser.add_argument(
+        "--plugin-name",
+        help="Only check the named plugin",
     )
 
     diff_parser = subparsers.add_parser(
@@ -176,7 +183,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "check-updates":
-        cmd_check_updates()
+        cmd_check_updates(args.plugin_name)
     elif args.command == "diff":
         cmd_diff(args.base_file, args.head_file)
 
