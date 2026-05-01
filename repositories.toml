@@ -54,7 +54,7 @@ git.commit = "12a58630dde5b7184dfafd97e67e0022c49f7a09"
 
 [rdkit]
 git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
-git.commit = "5954c943d40484881cf0a97486150cbe115cc2d8"
+git.commit = "163ce5d84ca677678e2b4253ac722f1eb24ef276"
 
 [cclib]
 git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
