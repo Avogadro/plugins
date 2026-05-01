@@ -85,7 +85,7 @@ jobs:
           if [ -z "$changed" ]; then
             echo "✅ No added/modified plugins to validate." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
-          elif python head/scripts/generate_index.py -t "$GH_TOKEN" --strict -p $changed; then
+          elif python head/scripts/generate_index.py -t "$GH_TOKEN" --strict -p $changed head/repositories.toml; then
             echo "✅ All changed plugins validated successfully." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
           else
@@ -142,7 +142,9 @@ jobs:
 
           See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
 
-          gh pr comment ${{ github.event.pull_request.number }} --body "$comment"
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo "${{ github.repository }}" \
+            --body "$comment"
 
       # ── Final: fail the job if any check failed ──
       - name: Fail on validation errors
