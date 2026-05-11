@@ -136,4 +136,4 @@ git.commit = "e933ae40dbe1d5d5e3a76cac36eed69b6d430766"
 
 [molfidget]
 git.repo = "https://github.com/ghutchis/avogadro-molfidget"
-git.commit = 7801a56b0fde2c63cd5a2512a1004fa1cb4b866b
+git.commit = "7801a56b0fde2c63cd5a2512a1004fa1cb4b866b"
