@@ -14,9 +14,11 @@ on:
     paths:
       - "repositories.toml"
 
+# Read-only: fork PRs only ever get a read-only GITHUB_TOKEN, so this workflow
+# does not comment. The companion comment-pr.yml workflow posts the result via
+# workflow_run, where it runs on the base branch with a read/write token.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   validate:
@@ -115,36 +117,27 @@ jobs:
             echo "pass=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Step 4: Post a summary comment on the PR ──
-      - name: Post PR comment
+      # ── Step 4: Save results for the comment workflow ──
+      # A fork PR's token can't post comments, so hand the outcome off to
+      # comment-pr.yml (workflow_run) via an artifact. The PR number is included
+      # because workflow_run has no PR context of its own.
+      - name: Save validation results
         if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          toml_ok="${{ steps.validate.outputs.toml_valid }}"
-          single_ok="${{ steps.single-check.outputs.pass }}"
-          total="${{ steps.diff.outputs.total }}"
+          mkdir -p pr-comment
+          {
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}"
+            echo "TOML_OK=${{ steps.validate.outputs.toml_valid }}"
+            echo "SINGLE_OK=${{ steps.single-check.outputs.pass }}"
+            echo "TOTAL=${{ steps.diff.outputs.total }}"
+          } > pr-comment/results.env
 
-          if [ "$toml_ok" = "true" ] && [ "$single_ok" = "true" ]; then
-            status="✅ All validation checks passed"
-          else
-            status="❌ Some validation checks failed"
-          fi
-
-          comment="## Plugin PR Validation
-
-          ${status}
-
-          | Check | Result |
-          |-------|--------|
-          | TOML structure | $([ "$toml_ok" = "true" ] && echo "✅ Valid" || echo "❌ Invalid") |
-          | Single plugin rule | $([ "$single_ok" = "true" ] && echo "✅ Pass ($total change)" || echo "❌ Fail ($total changes)") |
-
-          See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
-
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --repo "${{ github.repository }}" \
-            --body "$comment"
+      - name: Upload validation results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-comment
+          path: pr-comment/
 
       # ── Final: fail the job if any check failed ──
       - name: Fail on validation errors
