@@ -147,11 +147,14 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
             pixi_metadata.get("dependencies", {}).keys()
         )
         # Make sure the package itself is an editable dependency, but that
-        # there's no other PyPI dependencies listed in the Pixi table
+        # there's no other PyPI dependencies listed in the Pixi table.
+        # The package must always list itself, even when all other
+        # dependencies are resolved via conda-forge.
         # Have to normalize the dependency names first
         normalized_name = normalize_pkg_name(metadata["name"])
         pypi_deps = [
-            normalize_pkg_name(p) for p in pixi_metadata["pypi-dependencies"].keys()
+            normalize_pkg_name(p)
+            for p in pixi_metadata.get("pypi-dependencies", {}).keys()
         ]
         if len(pypi_deps) < 1 or normalized_name not in pypi_deps:
             raise Exception(
