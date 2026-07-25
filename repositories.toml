@@ -141,3 +141,8 @@ git.commit = "7801a56b0fde2c63cd5a2512a1004fa1cb4b866b"
 [openconf]
 git.repo = "https://github.com/ghutchis/avogadro-openconf"
 git.commit = "c4ed61fefb04c261c6a89a42a88d84fef46ec28a"
+
+[ibo]
+git.repo = "https://github.com/exergonic/avo_ibo.git"
+git.commit = "8e43044fca1b08508efa9b3062842c839ab677ba"
+release-tag = "v0.4.0"
