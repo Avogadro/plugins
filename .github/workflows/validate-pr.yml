@@ -176,23 +176,42 @@ jobs:
             echo "pass=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Step 4: Save results for the comment workflow ──
-      # A fork PR's token is read-only, so this job can't comment directly.
-      # Hand the outcome off to comment-pr.yml (workflow_run) via an artifact.
-      # PR_NUMBER comes from trusted GitHub event context (steps.pr), never from
-      # the checked-out PR code, so the comment job can trust it verbatim.
-      - name: Save validation results
+      # ── Step 4: Build the comment for comment-pr.yml ──
+      # A fork PR's token is read-only, so this job can't comment directly. It
+      # renders the comment and hands it to comment-pr.yml (workflow_run) as a
+      # `pr-comment` artifact. PR_NUMBER comes from trusted GitHub event context
+      # (steps.pr), never from the checked-out PR code.
+      - name: Build PR comment
         if: always()
         run: |
-          mkdir -p pr-comment
-          {
-            echo "PR_NUMBER=${{ steps.pr.outputs.number }}"
-            echo "TOML_OK=${{ steps.validate.outputs.toml_valid }}"
-            echo "SINGLE_OK=${{ steps.single-check.outputs.pass }}"
-            echo "TOTAL=${{ steps.diff.outputs.total }}"
-          } > pr-comment/results.env
+          toml_ok="${{ steps.validate.outputs.toml_valid }}"
+          single_ok="${{ steps.single-check.outputs.pass }}"
+          total="${{ steps.diff.outputs.total }}"
 
-      - name: Upload validation results
+          if [ "$toml_ok" = "true" ] && [ "$single_ok" = "true" ]; then
+            status="✅ All validation checks passed"
+          else
+            status="❌ Some validation checks failed"
+          fi
+
+          mkdir -p pr-comment
+          echo "${{ steps.pr.outputs.number }}" > pr-comment/pr_number
+          {
+            echo "<!-- validate-pr-report -->"
+            echo ""
+            echo "## Plugin PR Validation"
+            echo ""
+            echo "${status}"
+            echo ""
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            echo "| TOML structure | $([ "$toml_ok" = "true" ] && echo "✅ Valid" || echo "❌ Invalid") |"
+            echo "| Single plugin rule | $([ "$single_ok" = "true" ] && echo "✅ Pass ($total change)" || echo "❌ Fail ($total changes)") |"
+            echo ""
+            echo "See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+          } > pr-comment/comment.md
+
+      - name: Upload PR comment
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

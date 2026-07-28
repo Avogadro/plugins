@@ -8,7 +8,8 @@
 #   3. Runs Semgrep with community + custom rules
 #   4. Runs pip-audit on declared dependencies
 #   5. Checks for dangerous patterns (subprocess, eval, network, etc.)
-#   6. Generates a structured security report as a PR comment
+#   6. Hands a structured security report to comment-pr.yml, which posts it as
+#      a PR comment (this workflow stays read-only; see Phase 3).
 
 name: Security Scan
 
@@ -605,25 +606,33 @@ jobs:
             semgrep-results.json
 
   # ────────────────────────────────────────────
-  # Phase 3: Post combined results to the PR
+  # Phase 3: Build the combined report for comment-pr.yml
   # ────────────────────────────────────────────
-  post-results:
+  # Read-only: this job renders the combined report and hands it to
+  # comment-pr.yml (workflow_run) as a `pr-comment` artifact. That workflow
+  # posts it with a write token, so fork PRs get a comment even though this
+  # workflow's token is read-only.
+  build-comment:
     needs: [detect-changes, scan-plugin]
-    if: always() && needs.detect-changes.outputs.count != '0'
+    # Run even if some matrix legs failed (post partial results), but only when
+    # detection actually succeeded and found plugins to scan.
+    if: >-
+      !cancelled() &&
+      needs.detect-changes.result == 'success' &&
+      needs.detect-changes.outputs.count != '0'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - name: Download all scan reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: security-report-*
 
-      - name: Post combined PR comment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build combined comment
         run: |
+          mkdir -p pr-comment
+          echo "${{ needs.detect-changes.outputs.pr_number }}" > pr-comment/pr_number
           {
             echo "<!-- security-scan-report -->"
             echo ""
@@ -645,27 +654,19 @@ jobs:
             echo ""
             echo "> **Note:** Automated scans supplement but do not replace manual code review."
             echo "> Please examine the flagged items before approving this PR."
-          } > combined-comment.md
+          } > pr-comment/comment.md
 
-          # Truncate if too long for a PR comment (65536 char limit)
-          if [ $(wc -c < combined-comment.md) -gt 60000 ]; then
-            head -c 59000 combined-comment.md > truncated.md
-            echo "" >> truncated.md
-            echo "*(Report truncated — see workflow artifacts for full details)*" >> truncated.md
-            mv truncated.md combined-comment.md
+          # Truncate if too long for a PR comment (65536 char limit). The marker
+          # on the first line is preserved so comment-pr.yml can update in place.
+          if [ "$(wc -c < pr-comment/comment.md)" -gt 60000 ]; then
+            head -c 59000 pr-comment/comment.md > pr-comment/truncated.md
+            printf '\n\n*(Report truncated — see workflow artifacts for full details)*\n' \
+              >> pr-comment/truncated.md
+            mv pr-comment/truncated.md pr-comment/comment.md
           fi
 
-          comment_id=$(gh api repos/${{ github.repository }}/issues/${{ needs.detect-changes.outputs.pr_number }}/comments \
-            --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- security-scan-report -->"))) | .id' \
-            | tail -n 1)
-
-          if [ -n "$comment_id" ]; then
-            body=$(cat combined-comment.md)
-            gh api --method PATCH repos/${{ github.repository }}/issues/comments/"$comment_id" \
-              --raw-field body="$body" >/dev/null
-          else
-            gh pr comment ${{ needs.detect-changes.outputs.pr_number }} \
-              --repo "${{ github.repository }}" \
-              --body-file combined-comment.md
-          fi
+      - name: Upload PR comment
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-comment
+          path: pr-comment/

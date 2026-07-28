@@ -1,20 +1,23 @@
 # .github/workflows/comment-pr.yml
 #
-# Posts the plugin-validation summary as a comment on the PR.
+# Posts a summary comment on a PR on behalf of a read-only checks workflow.
 #
-# This runs via workflow_run, which means it executes on the *base* branch with
-# a read/write GITHUB_TOKEN even when the triggering PR came from a fork. (Fork
-# PRs only ever get a read-only token, so validate-pr.yml can't comment itself.)
+# It runs via workflow_run, so it executes on the *base* branch with a
+# read/write GITHUB_TOKEN even when the triggering PR came from a fork (fork PRs
+# only ever get a read-only token, so the check workflows can't comment
+# themselves). It never checks out or runs any PR code — it only downloads the
+# `pr-comment` artifact the check workflow produced and posts its contents.
 #
-# Security: this workflow never checks out or runs any code from the PR. It only
-# downloads the results artifact that validate-pr.yml produced and posts a
-# comment built from those trusted values.
+# Contract: the producing workflow uploads a `pr-comment` artifact containing
+#   - pr_number : the PR to comment on (from trusted event context)
+#   - comment.md: the rendered comment body, whose first line is an HTML marker
+#                 (e.g. <!-- validate-pr-report -->) used to update in place.
 
 name: Comment on Plugin PR
 
 on:
   workflow_run:
-    workflows: ["Validate Plugin PR"]
+    workflows: ["Validate Plugin PR", "Security Scan"]
     types:
       - completed
 
@@ -25,16 +28,18 @@ permissions:
 jobs:
   comment:
     runs-on: ubuntu-latest
-    # Only act on validation runs that actually ran (success or failure, so a
-    # failed run still gets a report) and were triggered by a PR event. Runs
-    # where the validate job was skipped upload no artifact, so skip them here.
+    # Only act on check runs that actually ran (success or failure, so failures
+    # still get a report) and were triggered by a PR event. Skipped runs upload
+    # no artifact, so there is nothing to post.
     if: >-
       (github.event.workflow_run.event == 'pull_request' ||
        github.event.workflow_run.event == 'issue_comment') &&
       (github.event.workflow_run.conclusion == 'success' ||
        github.event.workflow_run.conclusion == 'failure')
     steps:
-      - name: Download validation results
+      - name: Download comment payload
+        id: download
+        continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: pr-comment
@@ -42,54 +47,36 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post PR comment
+        if: steps.download.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
-          # Pull each value out of the trusted results file (no sourcing).
-          get() { grep -m1 "^$1=" results.env | cut -d= -f2-; }
-          PR_NUMBER=$(get PR_NUMBER)
-          TOML_OK=$(get TOML_OK)
-          SINGLE_OK=$(get SINGLE_OK)
-          TOTAL=$(get TOTAL)
-
-          if [ -z "$PR_NUMBER" ]; then
-            echo "No PR number in results; nothing to comment on."
+          if [ ! -f pr_number ] || [ ! -f comment.md ]; then
+            echo "No pr-comment payload found; nothing to post."
             exit 0
           fi
 
-          if [ "$TOML_OK" = "true" ] && [ "$SINGLE_OK" = "true" ]; then
-            status="✅ All validation checks passed"
-          else
-            status="❌ Some validation checks failed"
+          # PR number is trusted event context from the producing workflow;
+          # strip to digits defensively before use.
+          PR_NUMBER=$(tr -dc '0-9' < pr_number)
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number in payload; nothing to post."
+            exit 0
           fi
 
-          [ "$TOML_OK" = "true" ] && toml_cell="✅ Valid" || toml_cell="❌ Invalid"
-          [ "$SINGLE_OK" = "true" ] \
-            && single_cell="✅ Pass ($TOTAL change)" \
-            || single_cell="❌ Fail ($TOTAL changes)"
-
-          {
-            echo "<!-- validate-pr-report -->"
-            echo ""
-            echo "## Plugin PR Validation"
-            echo ""
-            echo "${status}"
-            echo ""
-            echo "| Check | Result |"
-            echo "|-------|--------|"
-            echo "| TOML structure | ${toml_cell} |"
-            echo "| Single plugin rule | ${single_cell} |"
-            echo ""
-            echo "See the [workflow summary](${RUN_URL}) for details."
-          } > comment.md
-
-          # Update our previous report in place if one exists, else post new.
-          comment_id=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
-            --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- validate-pr-report -->"))) | .id' \
-            | tail -n 1)
+          # The first line is the report's HTML marker; reuse it to update our
+          # previous comment of this type in place instead of stacking new ones.
+          MARKER=$(head -n1 comment.md)
+          comment_id=""
+          case "$MARKER" in
+            "<!--"*"-->")
+              comment_id=$(MARKER="$MARKER" gh api "repos/$REPO/issues/$PR_NUMBER/comments" \
+                --paginate \
+                --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains(env.MARKER))) | .id' \
+                | tail -n 1)
+              ;;
+          esac
 
           if [ -n "$comment_id" ]; then
             gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" \
