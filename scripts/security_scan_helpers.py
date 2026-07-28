@@ -297,7 +297,8 @@ def extract_dependencies(src_dir: Path, requirements_out: Path) -> dict:
                         "reason": reason,
                     }
                 )
-            else:
+            elif requirement:
+                # (None, None) means "skip" (e.g. the python constraint).
                 _append_requirement(requirements, requirement)
 
         poetry_groups = poetry.get("group", {})
@@ -312,7 +313,7 @@ def extract_dependencies(src_dir: Path, requirements_out: Path) -> dict:
                             "reason": f"{reason} in Poetry group {group_name}",
                         }
                     )
-                else:
+                elif requirement:
                     _append_requirement(requirements, requirement)
 
         for group_name, deps in data.get("dependency-groups", {}).items():

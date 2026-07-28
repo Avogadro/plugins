@@ -43,6 +43,7 @@ jobs:
       plugins: ${{ steps.diff.outputs.plugins }}
       count: ${{ steps.diff.outputs.count }}
       pr_number: ${{ steps.pr.outputs.number }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
       base_sha: ${{ steps.pr.outputs.base_sha }}
     steps:
       - name: Get PR details
@@ -146,10 +147,16 @@ jobs:
           persist-credentials: false
 
       - name: Clone plugin at pinned commit
+        env:
+          PLUGIN_REPO: ${{ matrix.plugin.repo }}
+          PLUGIN_COMMIT: ${{ matrix.plugin.commit }}
         run: |
-          git clone "${{ matrix.plugin.repo }}" plugin-src
+          # Pass attacker-controlled repositories.toml fields through the
+          # environment, never interpolated into the script, to avoid shell
+          # injection. `--` stops a repo value from being read as a git option.
+          git clone -- "$PLUGIN_REPO" plugin-src
           cd plugin-src
-          git checkout "${{ matrix.plugin.commit }}"
+          git checkout "$PLUGIN_COMMIT"
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -157,20 +164,22 @@ jobs:
 
       - name: Resolve scan directory
         id: src
+        env:
+          PLUGIN_PATH: ${{ matrix.plugin.path }}
         run: |
           repo_root=$(python3 -c "import os; print(os.path.realpath('plugin-src'))")
-          candidate=$(python3 -c "import os, sys; print(os.path.realpath(os.path.join('plugin-src', sys.argv[1])))" "${{ matrix.plugin.path }}")
+          candidate=$(python3 -c "import os, sys; print(os.path.realpath(os.path.join('plugin-src', sys.argv[1])))" "$PLUGIN_PATH")
 
           case "$candidate" in
             "$repo_root"|"$repo_root"/*)
               if [ ! -d "$candidate" ]; then
-                echo "::error::Configured plugin path does not exist: ${{ matrix.plugin.path }}"
+                echo "::error::Configured plugin path does not exist: $PLUGIN_PATH"
                 exit 1
               fi
               echo "src_dir=$candidate" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "::error::Configured plugin path escapes the cloned repository: ${{ matrix.plugin.path }}"
+              echo "::error::Configured plugin path escapes the cloned repository: $PLUGIN_PATH"
               exit 1
               ;;
           esac
@@ -208,9 +217,9 @@ jobs:
               data = json.load(f)
 
           results = data.get("results", [])
+          # bandit runs with -ll, so only MEDIUM and HIGH severities are reported.
           high = [r for r in results if r.get("issue_severity") == "HIGH"]
           medium = [r for r in results if r.get("issue_severity") == "MEDIUM"]
-          low = [r for r in results if r.get("issue_severity") == "LOW"]
 
           with open("bandit-report.md", "w", encoding="utf-8") as f:
               f.write("### 🔍 Bandit (Python Security Linter)\n\n")
@@ -220,8 +229,7 @@ jobs:
                   f.write("| Severity | Count |\n")
                   f.write("|----------|-------|\n")
                   f.write(f"| 🔴 High | {len(high)} |\n")
-                  f.write(f"| 🟡 Medium | {len(medium)} |\n")
-                  f.write(f"| 🟢 Low | {len(low)} |\n\n")
+                  f.write(f"| 🟡 Medium | {len(medium)} |\n\n")
 
                   if high or medium:
                       f.write("<details><summary>Details (high/medium)</summary>\n\n")
@@ -633,6 +641,7 @@ jobs:
         run: |
           mkdir -p pr-comment
           echo "${{ needs.detect-changes.outputs.pr_number }}" > pr-comment/pr_number
+          echo "${{ needs.detect-changes.outputs.head_sha }}" > pr-comment/head_sha
           {
             echo "<!-- security-scan-report -->"
             echo ""

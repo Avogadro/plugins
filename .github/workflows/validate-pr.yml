@@ -196,6 +196,7 @@ jobs:
 
           mkdir -p pr-comment
           echo "${{ steps.pr.outputs.number }}" > pr-comment/pr_number
+          echo "${{ steps.pr.outputs.head_sha }}" > pr-comment/head_sha
           {
             echo "<!-- validate-pr-report -->"
             echo ""

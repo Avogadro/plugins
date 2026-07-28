@@ -10,6 +10,8 @@
 #
 # Contract: the producing workflow uploads a `pr-comment` artifact containing
 #   - pr_number : the PR to comment on (from trusted event context)
+#   - head_sha  : the PR head the results describe; posting is skipped if the PR
+#                 has since advanced, so stale results don't overwrite newer ones
 #   - comment.md: the rendered comment body, whose first line is an HTML marker
 #                 (e.g. <!-- validate-pr-report -->) used to update in place.
 
@@ -63,6 +65,17 @@ jobs:
           if [ -z "$PR_NUMBER" ]; then
             echo "No PR number in payload; nothing to post."
             exit 0
+          fi
+
+          # Don't overwrite a newer report: if the PR head has advanced since
+          # these results were produced, a fresher run is already on its way.
+          if [ -f head_sha ]; then
+            artifact_sha=$(tr -dc '0-9a-fA-F' < head_sha)
+            current_sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+            if [ -n "$artifact_sha" ] && [ -n "$current_sha" ] && [ "$artifact_sha" != "$current_sha" ]; then
+              echo "PR head advanced ($artifact_sha -> $current_sha); skipping stale comment."
+              exit 0
+            fi
           fi
 
           # The first line is the report's HTML marker; reuse it to update our
