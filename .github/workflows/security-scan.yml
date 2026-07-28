@@ -93,6 +93,10 @@ jobs:
           d = json.load(sys.stdin)
           scan_list = []
           for p in d['added']:
+              # Skip src-based / non-git plugins: they have no repo+commit to
+              # clone, so they can't enter the git-clone-based scan matrix.
+              if not (p.get('repo') and p.get('commit')):
+                  continue
               scan_list.append({
                   'name': p['name'],
                   'repo': p['repo'],
@@ -102,15 +106,16 @@ jobs:
                   'change_type': 'added'
               })
           for p in d['modified']:
-              if p.get('new_commit'):
-                  scan_list.append({
-                      'name': p['name'],
-                      'repo': p['repo'],
-                      'commit': p['new_commit'],
-                      'path': p.get('path', '.'),
-                      'plugin_type': p.get('plugin_type', 'pypkg'),
-                      'change_type': 'modified'
-                  })
+              if not (p.get('repo') and p.get('new_commit')):
+                  continue
+              scan_list.append({
+                  'name': p['name'],
+                  'repo': p['repo'],
+                  'commit': p['new_commit'],
+                  'path': p.get('path', '.'),
+                  'plugin_type': p.get('plugin_type', 'pypkg'),
+                  'change_type': 'modified'
+              })
           print(json.dumps(scan_list))
           ")
 
@@ -230,6 +235,7 @@ jobs:
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
               out.write(f"high_count={len(high)}\n")
+              out.write(f"medium_count={len(medium)}\n")
               tool_error = os.environ["BANDIT_STATUS"] not in {"0", "1"}
               out.write(f"tool_error={'true' if tool_error else 'false'}\n")
 
@@ -417,7 +423,19 @@ jobs:
           src="${{ steps.src.outputs.src_dir }}"
           echo "### 📦 Dependency Audit" > deps-report.md
 
+          # Dependency extraction runs on untrusted plugin metadata. If it fails
+          # (e.g. malformed pyproject.toml), surface it as an audit error rather
+          # than letting continue-on-error swallow it into a false LOW result.
+          set +e
           python3 _this/scripts/security_scan_helpers.py extract-deps "$src" extracted-requirements.txt > deps-summary.json
+          extract_status=$?
+          set -e
+          if [ "$extract_status" -ne 0 ]; then
+            echo "⚠️ Dependency extraction failed (exit $extract_status); flagging for manual review." >> deps-report.md
+            echo "audit_error=true" >> "$GITHUB_OUTPUT"
+            echo "vuln_count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           python3 - <<'PY'
           import json
@@ -561,6 +579,7 @@ jobs:
 
           # Determine overall risk level
           bandit_fail="${{ steps.bandit.outcome == 'failure' && 'true' || 'false' }}"
+          bandit_medium="${{ steps.bandit.outputs.medium_count }}"
           critical="${{ steps.patterns.outputs.critical }}"
           vuln_count="${{ steps.deps.outputs.vuln_count }}"
           semgrep_max="${{ steps.semgrep.outputs.max_severity }}"
@@ -569,7 +588,7 @@ jobs:
 
           if [ "$critical" = "true" ] || [ "$bandit_fail" = "true" ] || [ "$semgrep_max" = "ERROR" ]; then
             echo "risk=HIGH" >> "$GITHUB_OUTPUT"
-          elif [ "${vuln_count:-0}" -gt 0 ] || [ "${{ steps.patterns.outputs.review }}" = "true" ] || [ "$semgrep_max" = "WARNING" ] || [ "$semgrep_error" = "true" ] || [ "$audit_error" = "true" ]; then
+          elif [ "${vuln_count:-0}" -gt 0 ] || [ "${bandit_medium:-0}" -gt 0 ] || [ "${{ steps.patterns.outputs.review }}" = "true" ] || [ "$semgrep_max" = "WARNING" ] || [ "$semgrep_error" = "true" ] || [ "$audit_error" = "true" ]; then
             echo "risk=MEDIUM" >> "$GITHUB_OUTPUT"
           else
             echo "risk=LOW" >> "$GITHUB_OUTPUT"
