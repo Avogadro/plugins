@@ -50,11 +50,11 @@
 
 [generators]
 git.repo = "https://github.com/OpenChemistry/avogenerators.git"
-git.commit = "92419fb472b065a70687875b2c8a51fa5b50a019"
+git.commit = "12a58630dde5b7184dfafd97e67e0022c49f7a09"
 
 [rdkit]
 git.repo = "https://github.com/ghutchis/avogadro-rdkit.git"
-git.commit = "5954c943d40484881cf0a97486150cbe115cc2d8"
+git.commit = "79bf1e5a235266cee85cebe63672d2ddeb015502"
 
 [cclib]
 git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
@@ -66,8 +66,8 @@ git.commit = "2c3c72f2b97fc0231c2628a221c3dc519166c422"
 
 [xtb]
 git.repo = "https://github.com/matterhorn103/avo_xtb.git"
-git.commit = "2e9289d462bc8fb8bf79ba02a7435f4013ec7945"
-release-tag = "0.11.0"
+git.commit = "e77e1d57faa5558acc36972dc0020f13ad6732b3"
+release-tag = "0.11.2"
 
 [xtb-energy]
 git.repo = "https://github.com/ghutchis/avogadro-xtb-energy.git"
@@ -127,5 +127,22 @@ git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
 
 [crest]
 git.repo = "https://github.com/matterhorn103/avogadro-crest"
-git.commit = "de7413bc8e890fca91dfd8befb7ce507cf5a3d06"
-release-tag = "0.1.0"
+git.commit = "4ac0a3135fc62e6e5c3d04a56a6b828a0050936e"
+release-tag = "0.1.1"
+
+[pypept]
+git.repo = "https://github.com/ghutchis/avogadro-pypept"
+git.commit = "e933ae40dbe1d5d5e3a76cac36eed69b6d430766"
+
+[molfidget]
+git.repo = "https://github.com/ghutchis/avogadro-molfidget"
+git.commit = "7801a56b0fde2c63cd5a2512a1004fa1cb4b866b"
+
+[openconf]
+git.repo = "https://github.com/ghutchis/avogadro-openconf"
+git.commit = "c4ed61fefb04c261c6a89a42a88d84fef46ec28a"
+
+[ibo]
+git.repo = "https://github.com/exergonic/avo_ibo.git"
+git.commit = "8e43044fca1b08508efa9b3062842c839ab677ba"
+release-tag = "v0.4.0"

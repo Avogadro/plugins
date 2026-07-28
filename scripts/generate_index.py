@@ -147,11 +147,14 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
             pixi_metadata.get("dependencies", {}).keys()
         )
         # Make sure the package itself is an editable dependency, but that
-        # there's no other PyPI dependencies listed in the Pixi table
+        # there's no other PyPI dependencies listed in the Pixi table.
+        # The package must always list itself, even when all other
+        # dependencies are resolved via conda-forge.
         # Have to normalize the dependency names first
         normalized_name = normalize_pkg_name(metadata["name"])
         pypi_deps = [
-            normalize_pkg_name(p) for p in pixi_metadata["pypi-dependencies"].keys()
+            normalize_pkg_name(p)
+            for p in pixi_metadata.get("pypi-dependencies", {}).keys()
         ]
         if len(pypi_deps) < 1 or normalized_name not in pypi_deps:
             raise Exception(
@@ -414,13 +417,20 @@ if __name__ == "__main__":
         nargs="+",
         help="Fetch and validate the metadata for only the given plugins",
     )
+    parser.add_argument(
+        "repos_file",
+        nargs="?",
+        default=Path(__file__).with_name("repositories.toml"),
+        type=Path,
+        help="Path to repositories.toml (default: next to this script)",
+    )
     args = parser.parse_args()
 
     auth = Auth.Token(args.token) if args.token else None
 
     gh = Github(auth=auth)
 
-    repos_file = Path(__file__).with_name("repositories.toml")
+    repos_file = args.repos_file
     with open(repos_file, "rb") as f:
         repos = tomllib.load(f)
     if args.plugins:

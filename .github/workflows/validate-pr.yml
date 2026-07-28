@@ -7,6 +7,10 @@
 #   2. Only one plugin is added or modified per PR
 #   3. Commits are full 40-char SHAs
 #   4. No unexpected fields or structural issues
+#
+# This job is read-only and uploads its results as an artifact; comment-pr.yml
+# (workflow_run) picks that up and posts the summary comment, so fork PRs get a
+# comment even though their token can't post one directly.
 
 name: Validate Plugin PR
 
@@ -25,7 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      # Read-only: this job never comments. It hands its results to
+      # comment-pr.yml (workflow_run), which owns pull-requests: write.
+      # pull-requests: read is needed to resolve PR refs on /validate comments.
+      pull-requests: read
     # Run on PR events, or on "/validate" comments on PRs
     if: >-
       github.event_name == 'pull_request' ||
@@ -169,51 +176,28 @@ jobs:
             echo "pass=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Step 4: Post a summary comment on the PR ──
-      - name: Post PR comment
+      # ── Step 4: Save results for the comment workflow ──
+      # A fork PR's token is read-only, so this job can't comment directly.
+      # Hand the outcome off to comment-pr.yml (workflow_run) via an artifact.
+      # PR_NUMBER comes from trusted GitHub event context (steps.pr), never from
+      # the checked-out PR code, so the comment job can trust it verbatim.
+      - name: Save validation results
         if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          toml_ok="${{ steps.validate.outputs.toml_valid }}"
-          single_ok="${{ steps.single-check.outputs.pass }}"
-          total="${{ steps.diff.outputs.total }}"
-
-          if [ "$toml_ok" = "true" ] && [ "$single_ok" = "true" ]; then
-            status="✅ All validation checks passed"
-          else
-            status="❌ Some validation checks failed"
-          fi
-
+          mkdir -p pr-comment
           {
-            echo "<!-- validate-pr-report -->"
-            echo ""
-            echo "## Plugin PR Validation"
-            echo ""
-            echo "${status}"
-            echo ""
-            echo "| Check | Result |"
-            echo "|-------|--------|"
-            echo "| TOML structure | $([ "$toml_ok" = "true" ] && echo "✅ Valid" || echo "❌ Invalid") |"
-            echo "| Single plugin rule | $([ "$single_ok" = "true" ] && echo "✅ Pass ($total change)" || echo "❌ Fail ($total changes)") |"
-            echo ""
-            echo "See the [workflow summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
-          } > comment.md
+            echo "PR_NUMBER=${{ steps.pr.outputs.number }}"
+            echo "TOML_OK=${{ steps.validate.outputs.toml_valid }}"
+            echo "SINGLE_OK=${{ steps.single-check.outputs.pass }}"
+            echo "TOTAL=${{ steps.diff.outputs.total }}"
+          } > pr-comment/results.env
 
-          comment_id=$(gh api repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/comments \
-            --paginate \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- validate-pr-report -->"))) | .id' \
-            | tail -n 1)
-
-          if [ -n "$comment_id" ]; then
-            body=$(cat comment.md)
-            gh api --method PATCH repos/${{ github.repository }}/issues/comments/"$comment_id" \
-              --raw-field body="$body" >/dev/null
-          else
-            gh pr comment ${{ steps.pr.outputs.number }} \
-              --repo "${{ github.repository }}" \
-              --body-file comment.md
-          fi
+      - name: Upload validation results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-comment
+          path: pr-comment/
 
       # ── Final: fail the job if any check failed ──
       - name: Fail on validation errors
