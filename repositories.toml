@@ -144,5 +144,4 @@ git.commit = "c4ed61fefb04c261c6a89a42a88d84fef46ec28a"
 
 [ibo]
 git.repo = "https://github.com/exergonic/avo_ibo.git"
-git.commit = "8e43044fca1b08508efa9b3062842c839ab677ba"
-release-tag = "v0.4.0"
+git.commit = "f37bcccfef92a5b30dbf01ac44537836a07de2a4"
