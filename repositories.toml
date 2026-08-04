@@ -140,7 +140,7 @@ git.commit = "7801a56b0fde2c63cd5a2512a1004fa1cb4b866b"
 
 [openconf]
 git.repo = "https://github.com/ghutchis/avogadro-openconf"
-git.commit = "c4ed61fefb04c261c6a89a42a88d84fef46ec28a"
+git.commit = "ff2b84a8b289bfecf1b8a17904a89f4b8b49e980"
 
 [ibo]
 git.repo = "https://github.com/exergonic/avo_ibo.git"
