@@ -156,4 +156,4 @@ git.commit = "4ee96a9223bf8c10dc6328ef234e6f2054b7bf65"
 
 [packmol]
 git.repo = "https://github.com/ghutchis/avogadro-packmol"
-git.commit = "af066dc806eda901cea5498fdbf706f8aa11fd3b"
+git.commit = "1ab1191f29752d18c3c1ac39be20d65b52ea20bc"
