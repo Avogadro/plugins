@@ -140,7 +140,7 @@ git.commit = "7801a56b0fde2c63cd5a2512a1004fa1cb4b866b"
 
 [openconf]
 git.repo = "https://github.com/ghutchis/avogadro-openconf"
-git.commit = "c4ed61fefb04c261c6a89a42a88d84fef46ec28a"
+git.commit = "ff2b84a8b289bfecf1b8a17904a89f4b8b49e980"
 
 [ibo]
 git.repo = "https://github.com/exergonic/avo_ibo.git"
@@ -157,3 +157,7 @@ git.commit = "4ee96a9223bf8c10dc6328ef234e6f2054b7bf65"
 [auto3d]
 git.repo = "https://github.com/ghutchis/avogadro-auto3d"
 git.commit = "824ceb328abe1976ea926dfbc7a5fcef3721a8d0"
+
+[packmol]
+git.repo = "https://github.com/ghutchis/avogadro-packmol"
+git.commit = "1ab1191f29752d18c3c1ac39be20d65b52ea20bc"
