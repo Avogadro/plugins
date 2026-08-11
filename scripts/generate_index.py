@@ -138,7 +138,9 @@ def add_download_counts(all_metadata: list[dict], counts: dict):
     A plugin with no counter entry gets zeroes rather than a missing key, so
     that consumers do not have to special-case a newly added plugin."""
     for metadata in all_metadata:
-        short_name = metadata["name"].removeprefix("avogadro-")
+        # Match the canonical form the counter records under, which is
+        # normalized as per PEP 503. Plugin names may contain capitals
+        short_name = normalize_pkg_name(metadata["name"]).removeprefix("avogadro-")
         metadata["downloads"] = counts.get(
             short_name, {"total": 0, "recent": 0, "window-days": None}
         )

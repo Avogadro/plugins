@@ -13,6 +13,13 @@ SHA="12a58630dde5b7184dfafd97e67e0022c49f7a09"
 pass() { printf '  \033[32mok\033[0m   %s\n' "$1"; }
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; exit 1; }
 
+# Lifetime install count for one plugin. Every count assertion below is a delta
+# against this, so the test is repeatable against a database that already has
+# rows -- which production always does.
+total() {
+  curl -sS "$BASE/stats/$1" | grep -o '"total": *[0-9]*' | grep -o '[0-9]*'
+}
+
 echo "==> health"
 curl -fsS "$BASE/health" >/dev/null && pass "responds"
 
@@ -29,6 +36,7 @@ loc2=$(curl -sS -o /dev/null -D - -H "User-Agent: $UA" \
 
 echo "==> repo-name aliases resolve (repo name != plugin name)"
 # avogadro-xtb lives in matterhorn103/avo_xtb, avogadro-generators in avogenerators.
+xtb_before=$(total xtb)
 for alias in xtb avo_xtb avo-xtb avogadro-xtb; do
   loc=$(curl -sS -o /dev/null -D - -H "User-Agent: $UA" \
     "$BASE/dl/$alias/HEAD.zip" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')
@@ -41,9 +49,10 @@ loc=$(curl -sS -o /dev/null -D - -H "User-Agent: $UA" \
   && pass "avogenerators" || fail "avogenerators gave ${loc:-none}"
 
 echo "==> aliases all count into one bucket"
-base=$(curl -sS "$BASE/stats/xtb" | grep -o '"total": *[0-9]*' | grep -o '[0-9]*')
-[ "$base" = "4" ] && pass "4 alias hits landed under 'xtb'" \
-  || fail "expected 4 under 'xtb', got $base"
+sleep 1  # counts are written after the response, in waitUntil
+xtb_delta=$(( $(total xtb) - xtb_before ))
+[ "$xtb_delta" = "4" ] && pass "4 alias hits landed under 'xtb'" \
+  || fail "expected 4 new under 'xtb', got $xtb_delta"
 curl -sS "$BASE/stats" | grep -q '"avo-xtb"\|"avo_xtb"\|"avogadro-xtb"' \
   && fail "an alias leaked its own bucket" || pass "no alias buckets"
 
@@ -56,8 +65,7 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -H "User-Agent: $UA" "$BASE/dl/ge
 [ "$code" = "400" ] || [ "$code" = "404" ] && pass "$code" || fail "expected 400/404, got $code"
 
 echo "==> counting"
-# Baseline, so the test is repeatable against a database that already has rows.
-before=$(curl -sS "$BASE/stats/generators" | grep -o '"total": *[0-9]*' | grep -o '[0-9]*')
+before=$(total generators)
 for _ in 1 2 3; do
   curl -sS -o /dev/null -H "User-Agent: $UA" "$BASE/dl/generators/$SHA.zip"
 done
@@ -66,7 +74,7 @@ curl -sS -o /dev/null -H "User-Agent: Mozilla/5.0" "$BASE/dl/generators/$SHA.zip
 curl -sS -o /dev/null -I -H "User-Agent: $UA" "$BASE/dl/generators/$SHA.zip"        # HEAD, must not count
 sleep 1
 
-after=$(curl -sS "$BASE/stats/generators" | grep -o '"total": *[0-9]*' | grep -o '[0-9]*')
+after=$(total generators)
 delta=$(( after - before ))
 # 3 loops + 1 alias. The Mozilla request is 'other', the HEAD counts nowhere.
 [ "$delta" = "4" ] && pass "counted 4 installs (alias folded in, HEAD and browser excluded)" \

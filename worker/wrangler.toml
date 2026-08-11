@@ -10,9 +10,11 @@ binding = "avogadro_plugin_downloads"
 database_name = "avogadro-plugin-downloads"
 database_id = "b45550cb-ee2d-4c79-969f-104ca2ae6f18"
 
-# Uncomment to serve on plugins.avogadro.cc. Cloudflare creates the DNS record
-# and certificate itself, because avogadro.cc is already in this account.
+# Served on plugins.avogadro.cc. Cloudflare created the DNS record and the
+# certificate itself, because avogadro.cc is already in this account.
 # A custom domain takes a bare hostname -- no "/*" (that is for zone routes).
+# Note that configuring a route disables the workers.dev subdomain unless
+# `workers_dev = true` is set explicitly.
 [[routes]]
 pattern = "plugins.avogadro.cc"
 custom_domain = true

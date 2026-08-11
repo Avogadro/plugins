@@ -27,7 +27,7 @@ handles 301/302/307/308 explicitly.
 | `GET /stats/<plugin>` | One plugin, plus a daily series |
 | `GET /health` | Liveness probe |
 
-`/stats` accepts `?days=` (default 30) and `?client=avogadro\|bot\|other\|all`
+`/stats` accepts `?days=` (default 180) and `?client=avogadro\|bot\|other\|all`
 (default `avogadro`).
 
 ### Plugin names
@@ -121,8 +121,9 @@ npx wrangler login
 npx wrangler whoami          # confirm the right account, if you have several
 ```
 
-**2. Create the database** and copy the printed `database_id` into
-`wrangler.toml`, replacing `local-testing-placeholder`:
+**2. Create the database.** `wrangler.toml` already carries the `database_id`
+of the deployed instance, so this step is only needed when standing up a fresh
+one, in which case put the printed id in `wrangler.toml`:
 
 ```sh
 npx wrangler d1 create avogadro-plugin-downloads
@@ -154,15 +155,15 @@ npx wrangler d1 execute avogadro-plugin-downloads --remote \
   --command "DELETE FROM downloads;"
 ```
 
-**6. Attach the domain.** Uncomment the `[[routes]]` block in `wrangler.toml`
-and `npx wrangler deploy` again. Cloudflare creates the `plugins.avogadro.cc`
-DNS record and its certificate automatically. Issuance usually takes under a
-minute; until it completes the hostname may serve a TLS error.
+The `[[routes]]` block is already active in `wrangler.toml`, so step 4 serves
+on `plugins.avogadro.cc` directly. Cloudflare created the DNS record and its
+certificate when the route was first deployed.
 
-Note that the `workers.dev` URL stops serving once `[[routes]]` is configured:
-wrangler disables the subdomain unless `workers_dev = true` is set explicitly.
-After this step `plugins.avogadro.cc` is the only way in, so test against the
-`workers.dev` URL *before* attaching the domain, not after.
+That also means the `workers.dev` URL does **not** serve: wrangler disables the
+subdomain whenever a route is configured, unless `workers_dev = true` is set.
+To get a URL for testing that is not the live domain, comment the `[[routes]]`
+block out for that deploy, or set `workers_dev = true` alongside it. Step 5 then
+has somewhere to point that is not production.
 
 ### Rollback
 

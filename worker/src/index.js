@@ -13,7 +13,9 @@
 
 const DEFAULT_INDEX_URL = 'https://avogadro.cc/plugins2.json';
 const INDEX_TTL_MS = 10 * 60 * 1000;
-const DEFAULT_WINDOW_DAYS = 30;
+// Six months. Wide enough that a lightly installed plugin still shows a
+// non-zero count; worth narrowing as the ecosystem grows.
+const DEFAULT_WINDOW_DAYS = 180;
 
 // Refs are commit SHAs or release tags. Deliberately strict: no slashes, so a
 // crafted ref cannot walk out of the /archive/ path into another repository.
@@ -143,7 +145,11 @@ async function handleStats(url, env, plugin, ctx) {
   if (!['avogadro', 'bot', 'other', 'all'].includes(client)) {
     return json({ error: `invalid client '${client}'` }, 400);
   }
-  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  // `day >= cutoff` includes both boundary dates, so step back days - 1 to
+  // cover exactly `days` dates counting today.
+  const cutoff = new Date(Date.now() - (days - 1) * 86400000)
+    .toISOString()
+    .slice(0, 10);
 
   const db = database(env);
   if (!db) {
