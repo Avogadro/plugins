@@ -1,0 +1,14 @@
+# Wrangler's local state: build cache, temp files, and the local D1 database
+# used by `wrangler dev`. Regenerated on demand, and unrelated to production.
+.wrangler/
+
+# Local secret vars for `wrangler dev`. Never commit these.
+.dev.vars
+.dev.vars.*
+
+node_modules/
+
+# schema.sql is the table definition and must be committed. A global ignore of
+# `*.sql` is common enough to be worth overriding here; a .gitignore nearer the
+# file wins over the global one.
+!schema.sql

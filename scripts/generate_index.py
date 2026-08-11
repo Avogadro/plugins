@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import tomllib
 import traceback
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -27,6 +28,12 @@ PLUGIN_TYPES = [
     "pypkg",
 ]
 
+"""Base URL of the download counter that plugin downloads are routed through.
+
+GitHub reports no download count for the auto-generated source archives, so
+installs are counted by a redirect hop in front of them. See `worker/`."""
+DEFAULT_WORKER = "https://plugins.avogadro.cc"
+
 """A list of current plugin feature types."""
 FEATURE_TYPES = [
     "electrostatic-models",
@@ -37,9 +44,104 @@ FEATURE_TYPES = [
 ]
 
 
+"""User agent for this script's own HTTP requests.
+
+Cloudflare answers the default `Python-urllib/...` agent with a 403, which would
+silently disable the download counter and fall the index back to GitHub URLs on
+every build."""
+USER_AGENT = "avogadro-plugin-index/1.0 (+https://github.com/Avogadro/plugins)"
+
+
+def request(url: str, method: str = "GET") -> urllib.request.Request:
+    """Build a request that identifies itself."""
+    return urllib.request.Request(
+        url, method=method, headers={"User-Agent": USER_AGENT}
+    )
+
+
 def normalize_pkg_name(name: str) -> str:
     """Normalize a package name as per PEP 503."""
     return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def check_download_url(download_url: str, expected_target: str):
+    """Confirm the download counter resolves a plugin to the expected archive.
+
+    Uses HEAD, which the Worker deliberately does not count, so validating the
+    index costs nothing in the download statistics. Catches the case where the
+    Worker cannot resolve a plugin whose repository name differs from its
+    plugin name."""
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect)
+    try:
+        with opener.open(request(download_url, "HEAD")) as response:
+            raise Exception(
+                f"{download_url} returned {response.status}, expected a redirect!"
+            )
+    except urllib.error.HTTPError as e:
+        if e.code not in (301, 302, 307, 308):
+            raise Exception(f"{download_url} returned {e.code}!")
+        target = e.headers.get("Location")
+        if target != expected_target:
+            raise Exception(
+                f"{download_url} redirects to {target}, expected {expected_target}!"
+            )
+
+
+def worker_available(worker: str) -> bool:
+    """Check the download counter is reachable before relying on it.
+
+    Without this, an outage would make every plugin fail its URL check and drop
+    out of the generated index. Losing the download statistics for one build is
+    an acceptable failure; publishing an empty index is not."""
+    try:
+        with urllib.request.urlopen(request(f"{worker}/health"), timeout=10) as r:
+            if r.status == 200:
+                return True
+            print(f"{worker} returned {r.status} rather than 200")
+    except Exception as e:
+        print(f"Could not reach {worker}: {e}")
+    return False
+
+
+def fetch_download_counts(stats_url: str) -> dict:
+    """Fetch per-plugin download counts from the download counter.
+
+    Returns an empty dict on any failure: statistics are a nice-to-have, and
+    must never stop the index from being generated."""
+    try:
+        with urllib.request.urlopen(request(stats_url), timeout=30) as response:
+            stats = json.load(response)
+    except Exception as e:
+        print(f"Could not fetch download counts from {stats_url}: {e}")
+        return {}
+
+    window = stats.get("window_days")
+    counts = {}
+    for plugin, entry in stats.get("plugins", {}).items():
+        counts[plugin] = {
+            "total": entry.get("total", 0),
+            "recent": entry.get("recent", 0),
+            "window-days": window,
+        }
+    print(f"Fetched download counts for {len(counts)} plugins")
+    return counts
+
+
+def add_download_counts(all_metadata: list[dict], counts: dict):
+    """Merge download counts into the generated metadata.
+
+    A plugin with no counter entry gets zeroes rather than a missing key, so
+    that consumers do not have to special-case a newly added plugin."""
+    for metadata in all_metadata:
+        short_name = metadata["name"].removeprefix("avogadro-")
+        metadata["downloads"] = counts.get(
+            short_name, {"total": 0, "recent": 0, "window-days": None}
+        )
 
 
 def get_gh_repo_metadata(gh_repo, commit: str, release_tag: str | None) -> dict:
@@ -281,7 +383,9 @@ def set_defaults(repo_info: dict):
         repo_info.setdefault(k, v)
 
 
-def get_metadata(table_name: str, repo_info: dict, gh: Github) -> dict:
+def get_metadata(
+    table_name: str, repo_info: dict, gh: Github, worker: str | None, strict: bool
+) -> dict:
     """Get and validate the metadata for a single plugin based on the provided
     information."""
     # First add the default values for any optional keys
@@ -309,11 +413,30 @@ def get_metadata(table_name: str, repo_info: dict, gh: Github) -> dict:
         gh_repo = gh.get_repo(repo_name)
 
         # Automatically generate the source archive details for Avogadro
-        src_url = f"{repo_url}/archive/{commit}.zip"
+        # Always hash the archive straight from GitHub, so that generating the
+        # index does not depend on the download counter being up
+        archive_url = f"{repo_url}/archive/{commit}.zip"
         src_hash = hashlib.sha256()
-        with urllib.request.urlopen(src_url) as response:
+        with urllib.request.urlopen(request(archive_url)) as response:
             while chunk := response.read(8192):
                 src_hash.update(chunk)
+
+        # Hand Avogadro the counted URL instead, which redirects to exactly the
+        # archive hashed above, so the recorded hash still validates
+        src_url = archive_url
+        if worker:
+            counted_url = f"{worker}/dl/{table_name}/{commit}.zip"
+            try:
+                check_download_url(counted_url, archive_url)
+                src_url = counted_url
+            except Exception as e:
+                # An uncounted install beats a broken one, so fall back to the
+                # archive URL rather than dropping the plugin from the index
+                print(f"WARNING: {e}")
+                print(f"Falling back to the GitHub archive URL for {table_name}")
+                if strict:
+                    raise
+
         repo_info["src"] = {"url": src_url, "sha256": src_hash.hexdigest()}
 
         path = repo_info.get("path", ".")
@@ -374,7 +497,9 @@ def get_metadata(table_name: str, repo_info: dict, gh: Github) -> dict:
     return plugin_metadata
 
 
-def get_metadata_all(repos: dict[str, dict], gh: Github, strict: bool) -> list[dict]:
+def get_metadata_all(
+    repos: dict[str, dict], gh: Github, strict: bool, worker: str | None
+) -> list[dict]:
     """Collect all the metadata for all plugins with repository information in
     the provided dict."""
     all_metadata = []
@@ -382,7 +507,7 @@ def get_metadata_all(repos: dict[str, dict], gh: Github, strict: bool) -> list[d
     for table_name, repo_info in repos.items():
         print("----------" * 8)
         try:
-            plugin_metadata = get_metadata(table_name, repo_info, gh)
+            plugin_metadata = get_metadata(table_name, repo_info, gh, worker, strict)
             all_metadata.append(plugin_metadata)
             print(f"Metadata OK, {table_name} added to generated plugin index")
         except Exception as e:
@@ -418,6 +543,19 @@ if __name__ == "__main__":
         help="Fetch and validate the metadata for only the given plugins",
     )
     parser.add_argument(
+        "--worker",
+        default=DEFAULT_WORKER,
+        help=(
+            "Base URL of the download counter, which the source URLs are routed"
+            f" through (default: {DEFAULT_WORKER})"
+        ),
+    )
+    parser.add_argument(
+        "--no-worker",
+        action="store_true",
+        help="Point source URLs straight at GitHub and omit download counts",
+    )
+    parser.add_argument(
         "repos_file",
         nargs="?",
         default=Path(__file__).with_name("repositories.toml"),
@@ -425,6 +563,11 @@ if __name__ == "__main__":
         help="Path to repositories.toml (default: next to this script)",
     )
     args = parser.parse_args()
+
+    worker = None if args.no_worker else args.worker.rstrip("/")
+    if worker and not worker_available(worker):
+        print("Continuing with GitHub archive URLs and no download counts")
+        worker = None
 
     auth = Auth.Token(args.token) if args.token else None
 
@@ -435,7 +578,9 @@ if __name__ == "__main__":
         repos = tomllib.load(f)
     if args.plugins:
         repos = {k: v for k, v in repos.items() if k in args.plugins}
-    metadata = get_metadata_all(repos, gh, args.strict)
+    metadata = get_metadata_all(repos, gh, args.strict, worker)
+    if worker:
+        add_download_counts(metadata, fetch_download_counts(f"{worker}/stats"))
     indent = 2 if args.pretty else None
     if args.show:
         print(json.dumps(metadata, indent=indent))

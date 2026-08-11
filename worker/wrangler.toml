@@ -1,0 +1,18 @@
+name = "avogadro-plugin-downloads"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[vars]
+INDEX_URL = "https://avogadro.cc/plugins2.json"
+
+[[d1_databases]]
+binding = "avogadro_plugin_downloads"
+database_name = "avogadro-plugin-downloads"
+database_id = "b45550cb-ee2d-4c79-969f-104ca2ae6f18"
+
+# Uncomment to serve on plugins.avogadro.cc. Cloudflare creates the DNS record
+# and certificate itself, because avogadro.cc is already in this account.
+# A custom domain takes a bare hostname -- no "/*" (that is for zone routes).
+[[routes]]
+pattern = "plugins.avogadro.cc"
+custom_domain = true
