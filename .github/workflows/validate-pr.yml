@@ -146,7 +146,13 @@ jobs:
           PY
           )
 
-          if python3 trusted/generate_index.py -t "$GH_TOKEN" --strict -p "${changed_plugins[@]}"; then
+          # --no-worker: the download counter resolves a plugin through the
+          # *published* index, so it cannot know about a plugin whose entry
+          # only exists in this PR. Checking the counted URL here would 404 on
+          # every newly added plugin (and on any changed repo URL), so validate
+          # against the GitHub archive URLs instead. The index build still does
+          # the counted-URL check, and falls back to GitHub when it fails.
+          if python3 trusted/generate_index.py -t "$GH_TOKEN" --strict --no-worker -p "${changed_plugins[@]}"; then
             echo "✅ All changed plugins validated successfully." >> "$GITHUB_STEP_SUMMARY"
             echo "toml_valid=true" >> "$GITHUB_OUTPUT"
           else
