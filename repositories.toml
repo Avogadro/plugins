@@ -75,7 +75,7 @@ git.commit = "287e8093f65bca5b9d27fbf517a8719ae319d108"
 
 [aimnet2]
 git.repo = "https://github.com/ghutchis/avogadro-aimnet2.git"
-git.commit = "3c9cce218a681d6ad07389b197919c9d6799b5a6"
+git.commit = "264067c395cf58f2802bb9b409131d322e7c1a7b"
 
 [genice]
 git.repo = "https://github.com/ghutchis/avogadro-genice.git"
