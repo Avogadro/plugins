@@ -119,7 +119,7 @@ git.commit = "525a745aa33c580e70e2ad2e7b94874bfde0eca8"
 
 [ani-energy]
 git.repo = "https://github.com/ghutchis/avogadro-ani-energy.git"
-git.commit = "9a752e1e9044e4eac0504baf7f414697440aa4f2"
+git.commit = "f7c3f87d9bbd088b31b8320988fbc5431262adf1"
 
 [psi4-cubeprop]
 git.repo = "https://github.com/ghutchis/avogadro-psi4-cubeprop.git"
