@@ -115,7 +115,7 @@ git.commit = "812474ae62749bc99f76b747f7a80d0afe774bfe"
 
 [mattersim]
 git.repo = "https://github.com/ghutchis/avogadro-mattersim.git"
-git.commit = "525a745aa33c580e70e2ad2e7b94874bfde0eca8"
+git.commit = "6c470d8ff79570cd8b08481777b6de4f728ca060"
 
 [ani-energy]
 git.repo = "https://github.com/ghutchis/avogadro-ani-energy.git"
