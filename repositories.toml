@@ -160,7 +160,7 @@ git.commit = "824ceb328abe1976ea926dfbc7a5fcef3721a8d0"
 
 [packmol]
 git.repo = "https://github.com/ghutchis/avogadro-packmol"
-git.commit = "1ab1191f29752d18c3c1ac39be20d65b52ea20bc"
+git.commit = "0bb2d569d9c999c0a24f17a9a913f80d4976dd0b"
 
 [stk]
 git.repo = "https://github.com/ghutchis/avogadro-stk"
