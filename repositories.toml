@@ -58,7 +58,7 @@ git.commit = "82498e3a3cedc2d465ccdcd93cabec1b2505dc5a"
 
 [cclib]
 git.repo = "https://github.com/OpenChemistry/avogadro-cclib.git"
-git.commit = "91110cf4714eda8e3e258413553d48a5690cddd5"
+git.commit = "cf5f13ba091d0b46f1f243d579f71facbd572e90"
 
 [build-ase]
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
