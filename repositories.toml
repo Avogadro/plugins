@@ -148,7 +148,7 @@ git.commit = "b80b7d43ec5de8d22959b33824b6ffafeeb6c9c3"
 
 [xyzrender]
 git.repo = "https://github.com/ghutchis/avogadro-xyzrender"
-git.commit = "138fddae9e111f8fd79519db88600a451ba4a5c5"
+git.commit = "22f060822b5740d222d32db9c07d428021386945"
 
 [openclatura]
 git.repo = "https://github.com/ghutchis/avogadro-openclatura"
