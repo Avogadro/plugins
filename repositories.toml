@@ -144,7 +144,7 @@ git.commit = "ff2b84a8b289bfecf1b8a17904a89f4b8b49e980"
 
 [ibo]
 git.repo = "https://github.com/exergonic/avo_ibo.git"
-git.commit = "4984906b6c1aa5c7874e3d14eb7318221e0f6d40"
+git.commit = "cd25e5eb99c45396885222eaae6e5cb624319965"
 
 [xyzrender]
 git.repo = "https://github.com/ghutchis/avogadro-xyzrender"
