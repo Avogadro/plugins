@@ -34,6 +34,19 @@ GitHub reports no download count for the auto-generated source archives, so
 installs are counted by a redirect hop in front of them. See `worker/`."""
 DEFAULT_WORKER = "https://plugins.avogadro.cc"
 
+"""`[project.urls]` keys that name an issue tracker, in order of preference.
+
+PyPI itself matches these labels case- and punctuation-insensitively, and
+plugins in the wild use every spelling of them, so normalize before comparing."""
+ISSUE_URL_KEYS = [
+    "issues",
+    "issuetracker",
+    "bugtracker",
+    "bugreports",
+    "bugs",
+    "tracker",
+]
+
 """A list of current plugin feature types."""
 FEATURE_TYPES = [
     "electrostatic-models",
@@ -62,6 +75,24 @@ def request(url: str, method: str = "GET") -> urllib.request.Request:
 def normalize_pkg_name(name: str) -> str:
     """Normalize a package name as per PEP 503."""
     return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def find_issues_url(urls: dict, repo_url: str) -> str | None:
+    """Work out where users should report bugs against a plugin.
+
+    Prefers an explicit `[project.urls]` entry, but falls back to the GitHub
+    repository's issue form. Almost no plugin declares a tracker of its own
+    yet, so the fallback is the common case rather than the exception."""
+    normalized = {
+        re.sub(r"[-_. ]+", "", label).lower(): url for label, url in urls.items()
+    }
+    for key in ISSUE_URL_KEYS:
+        if normalized.get(key):
+            return normalized[key]
+
+    if repo_url.startswith("https://github.com/"):
+        return f"{repo_url}/issues/new"
+    return None
 
 
 def check_download_url(download_url: str, expected_target: str):
@@ -216,6 +247,10 @@ def extract_toml_metadata(toml: dict, toml_format: str) -> dict:
     # Optional fields in `[project]`/the top level
     metadata["description"] = project_metadata.get("description", "")
     metadata["readme"] = project_metadata.get("readme", None)
+    # Keywords give Avogadro's plugin manager something to search beyond the
+    # name and the one-line description
+    metadata["keywords"] = project_metadata.get("keywords", [])
+    metadata["urls"] = project_metadata.get("urls", {})
 
     # Required fields in `[tool.avogadro]`/the top level
     for required_key in []:
@@ -368,6 +403,11 @@ def tidy_metadata(metadata: dict):
         gh_readme = metadata.pop("gh-readme")
         print(f"Found GitHub README for {metadata['name']} at {gh_readme['url']}")
         metadata["readme-url"] = gh_readme["url"]
+
+    # Resolve the issue tracker once, here, so that every consumer of the index
+    # gets the same answer rather than each reimplementing the GitHub fallback
+    repo_url = metadata.get("git", {}).get("repo", "").removesuffix(".git")
+    metadata["bug-tracker"] = find_issues_url(metadata.get("urls", {}), repo_url)
 
     # Don't need the entry points/scripts in the index
     metadata.pop("scripts", None)
