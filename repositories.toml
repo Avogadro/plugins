@@ -62,7 +62,7 @@ git.commit = "cf5f13ba091d0b46f1f243d579f71facbd572e90"
 
 [build-ase]
 git.repo = "https://github.com/ghutchis/avogadro-build-ase.git"
-git.commit = "2c3c72f2b97fc0231c2628a221c3dc519166c422"
+git.commit = "0a4792a5b94c0311177880970ed361ea2a95b2ff"
 
 [xtb]
 git.repo = "https://github.com/matterhorn103/avo_xtb.git"
