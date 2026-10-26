@@ -170,3 +170,6 @@ git.commit = "3becd2c6b01c62b832ea17d4da13a4969b5b38b0"
 git.repo = "https://github.com/ghutchis/avogadro-cp2k"
 git.commit = "e1968403e749e29f9460388f20cec6bc56c0b81a"
 
+[orthonym]
+git.repo = "https://github.com/ghutchis/avogadro-orthonym"
+git.commit = "349b835096abbb5ba76d6a3895c5cacbf08b0abb"
