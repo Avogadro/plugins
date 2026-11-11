@@ -173,3 +173,7 @@ git.commit = "e1968403e749e29f9460388f20cec6bc56c0b81a"
 [orthonym]
 git.repo = "https://github.com/ghutchis/avogadro-orthonym"
 git.commit = "349b835096abbb5ba76d6a3895c5cacbf08b0abb"
+
+[mitsuba]
+git.repo = "https://github.com/ghutchis/avogadro-mitsuba"
+git.commit = "1389576abe4f02c1df2c3fb3d40de4698b2a4b54"
