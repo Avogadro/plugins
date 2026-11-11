@@ -177,3 +177,7 @@ git.commit = "349b835096abbb5ba76d6a3895c5cacbf08b0abb"
 [mitsuba]
 git.repo = "https://github.com/ghutchis/avogadro-mitsuba"
 git.commit = "1389576abe4f02c1df2c3fb3d40de4698b2a4b54"
+
+[ferric]
+git.repo = "https://github.com/mgoldey/avogadro-ferric.git"
+git.commit = "68032ef162b430c594b708c45b7bd95b7ea7201a"
