@@ -181,3 +181,7 @@ git.commit = "1389576abe4f02c1df2c3fb3d40de4698b2a4b54"
 [ferric]
 git.repo = "https://github.com/mgoldey/avogadro-ferric.git"
 git.commit = "68032ef162b430c594b708c45b7bd95b7ea7201a"
+
+[nanoparticle]
+git.repo = "https://github.com/ghutchis/avogadro-nanoparticle"
+git.commit = "5e430fb4e6947614b4a5467794b6df2907402346"
