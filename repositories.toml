@@ -152,7 +152,7 @@ git.commit = "22f060822b5740d222d32db9c07d428021386945"
 
 [openclatura]
 git.repo = "https://github.com/ghutchis/avogadro-openclatura"
-git.commit = "4ee96a9223bf8c10dc6328ef234e6f2054b7bf65"
+git.commit = "496d19dd79c99a9ba4d1f637f4b5033da55c531a"
 
 [auto3d]
 git.repo = "https://github.com/ghutchis/avogadro-auto3d"
