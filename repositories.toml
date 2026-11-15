@@ -91,7 +91,7 @@ git.commit = "bbc0d7bd093a87b1e27227ea861847e3485a9d3a"
 
 [antechamber-charges]
 git.repo = "https://github.com/ghutchis/avogadro-antechamber-charges.git"
-git.commit = "5f6c70b459d8f76ebc08545cf1107d6b3ec384e3"
+git.commit = "a0d337de22b493c86f0d962f8db4b85e786bce94"
 
 [chiraltube]
 git.repo = "https://github.com/ghutchis/avogadro-chiraltube.git"
