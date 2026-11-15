@@ -79,7 +79,7 @@ git.commit = "264067c395cf58f2802bb9b409131d322e7c1a7b"
 
 [genice]
 git.repo = "https://github.com/ghutchis/avogadro-genice.git"
-git.commit = "c511d64a07aa3260fb5a297847020c668819fcef"
+git.commit = "6d2942b098fe5c7b8db26da9d30d8437b9d7df95"
 
 [turtlemol]
 git.repo = "https://github.com/ghutchis/avogadro-turtlemol.git"
