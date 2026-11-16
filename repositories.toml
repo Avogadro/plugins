@@ -103,7 +103,7 @@ git.commit = "b0b619576d87c6288c7120f781a40a7b64ba9399"
 
 [pymatgen]
 git.repo = "https://github.com/ghutchis/avogadro-pymatgen.git"
-git.commit = "aa1fb4c448ec112e3a75b171325fc1ff79b912ef"
+git.commit = "85997ed9bb479da00d2a02bec1681f80cc7db3fb"
 
 [mdtraj]
 git.repo = "https://github.com/ghutchis/avogadro-mdtraj.git"
