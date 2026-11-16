@@ -156,7 +156,7 @@ git.commit = "496d19dd79c99a9ba4d1f637f4b5033da55c531a"
 
 [auto3d]
 git.repo = "https://github.com/ghutchis/avogadro-auto3d"
-git.commit = "824ceb328abe1976ea926dfbc7a5fcef3721a8d0"
+git.commit = "42cd197f301cefd5addf13c3b30fb04d3beba4a6"
 
 [packmol]
 git.repo = "https://github.com/ghutchis/avogadro-packmol"
