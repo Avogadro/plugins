@@ -107,7 +107,7 @@ git.commit = "aa1fb4c448ec112e3a75b171325fc1ff79b912ef"
 
 [mdtraj]
 git.repo = "https://github.com/ghutchis/avogadro-mdtraj.git"
-git.commit = "62ee266e340b6dcb10a6f6d8468c7532ab98653f"
+git.commit = "2f0faaf46ba9c27d99ed48513fe77d30c4a225fd"
 
 [ob-energy]
 git.repo = "https://github.com/ghutchis/avogadro-ob-energy.git"
