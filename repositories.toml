@@ -185,3 +185,7 @@ git.commit = "68032ef162b430c594b708c45b7bd95b7ea7201a"
 [nanoparticle]
 git.repo = "https://github.com/ghutchis/avogadro-nanoparticle"
 git.commit = "5e430fb4e6947614b4a5467794b6df2907402346"
+
+[trexio]
+git.repo = "https://github.com/ghutchis/avogadro-trexio"
+git.commit = "8f09cbea37769dce3403c21c1e4be334230a4992"
