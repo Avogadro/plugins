@@ -11,11 +11,13 @@ import io
 import json
 import re
 import shutil
+import subprocess
 import tempfile
 import tomllib
 import traceback
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 from github import Github
@@ -175,6 +177,78 @@ def add_download_counts(all_metadata: list[dict], counts: dict):
         metadata["downloads"] = counts.get(
             short_name, {"total": 0, "recent": 0, "window-days": None}
         )
+
+
+def run_git(repo_dir: Path, *args: str) -> str | None:
+    """Run git in `repo_dir`, returning stdout, or None on any failure."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, ValueError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def get_date_added_fn(repos_file: Path):
+    """Return a function mapping a table key in `repos_file` to the date the
+    table first reached the default branch, as an ISO 8601 UTC string.
+
+    The function returns None when that cannot be determined: git is missing,
+    the file is not in a git repository, the clone is shallow (the history
+    would be truncated and every plugin would look newly added), or no commit
+    is found. This must never raise."""
+    try:
+        repos_file = Path(repos_file).resolve()
+        repo_dir = repos_file.parent
+        top = run_git(repo_dir, "rev-parse", "--show-toplevel")
+        if top is None:
+            print("Not in a git repository, omitting plugin date-added")
+            return lambda key: None
+        shallow = run_git(repo_dir, "rev-parse", "--is-shallow-repository")
+        if shallow is None or shallow.strip() != "false":
+            print("Shallow or unknown git history, omitting plugin date-added")
+            return lambda key: None
+        rel_path = repos_file.relative_to(Path(top.strip()).resolve()).as_posix()
+    except Exception:
+        return lambda key: None
+
+    def date_added(key: str) -> str | None:
+        # Match the table header line itself; this avoids `[xtb]` matching
+        # `[xtb-energy]` and the `[plugin-name]` in the header comments
+        # git -G takes a POSIX regex, so escape only POSIX metacharacters
+        # (re.escape would emit undefined sequences such as `\-`)
+        escaped = re.sub(r"([.\[\]()*+?{}|^$\\])", r"\\\1", key)
+        pattern = "^\\[" + escaped + "\\][[:space:]]*$"
+        out = run_git(
+            repo_dir,
+            "log",
+            "--first-parent",
+            "--diff-merges=first-parent",
+            "-s",
+            "--format=%cI",
+            "-G" + pattern,
+            "--",
+            rel_path,
+        )
+        if not out:
+            return None
+        lines = out.strip().splitlines()
+        if not lines:
+            return None
+        try:
+            # The oldest commit is last
+            date = datetime.fromisoformat(lines[-1].strip())
+        except ValueError:
+            return None
+        return date.astimezone(timezone.utc).isoformat()
+
+    return date_added
 
 
 def get_gh_repo_metadata(gh_repo, commit: str, release_tag: str | None) -> dict:
@@ -540,16 +614,26 @@ def get_metadata(
 
 
 def get_metadata_all(
-    repos: dict[str, dict], gh: Github, strict: bool, worker: str | None
+    repos: dict[str, dict],
+    gh: Github,
+    strict: bool,
+    worker: str | None,
+    date_added=None,
 ) -> list[dict]:
     """Collect all the metadata for all plugins with repository information in
-    the provided dict."""
+    the provided dict.
+
+    `date_added`, if given, maps a table key to the date the plugin was first
+    added to `repositories.toml` (or None if unknown)."""
     all_metadata = []
 
     for table_name, repo_info in repos.items():
         print("----------" * 8)
         try:
             plugin_metadata = get_metadata(table_name, repo_info, gh, worker, strict)
+            added = date_added(table_name) if date_added else None
+            if added:
+                plugin_metadata["date-added"] = added
             all_metadata.append(plugin_metadata)
             print(f"Metadata OK, {table_name} added to generated plugin index")
         except Exception as e:
@@ -620,7 +704,9 @@ if __name__ == "__main__":
         repos = tomllib.load(f)
     if args.plugins:
         repos = {k: v for k, v in repos.items() if k in args.plugins}
-    metadata = get_metadata_all(repos, gh, args.strict, worker)
+    metadata = get_metadata_all(
+        repos, gh, args.strict, worker, get_date_added_fn(repos_file)
+    )
     if worker:
         add_download_counts(metadata, fetch_download_counts(f"{worker}/stats"))
     indent = 2 if args.pretty else None
