@@ -99,7 +99,7 @@ git.commit = "170467fc57c4363587bc5dfb206d5c36ad61039f"
 
 [mace]
 git.repo = "https://github.com/ghutchis/avogadro-mace.git"
-git.commit = "2e60a896f3446b1829af40e6342f70b23f2c6f0c"
+git.commit = "fd3c19589aa56fea8fd44014694da606f3382c12"
 
 [pymatgen]
 git.repo = "https://github.com/ghutchis/avogadro-pymatgen.git"
