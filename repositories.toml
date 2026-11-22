@@ -189,3 +189,8 @@ git.commit = "5e430fb4e6947614b4a5467794b6df2907402346"
 [trexio]
 git.repo = "https://github.com/ghutchis/avogadro-trexio"
 git.commit = "8f09cbea37769dce3403c21c1e4be334230a4992"
+
+[abinit]
+git.repo = "https://github.com/ghutchis/avogadro-abinit"
+git.commit = "aca42049cbbabe64c203add8dc3cd53e396ba8c3"
+
