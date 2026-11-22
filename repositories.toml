@@ -123,7 +123,7 @@ git.commit = "9a0eac12d6a6974f66f458c3a4b72b37f8d1849b"
 
 [psi4-cubeprop]
 git.repo = "https://github.com/ghutchis/avogadro-psi4-cubeprop.git"
-git.commit = "d1cd86cf9dd5154fe3066a64d5e500dc9ac9fe8e"
+git.commit = "4a7adc81f2831b66839ea27d7f44a0650a0da9be"
 
 [crest]
 git.repo = "https://github.com/matterhorn103/avogadro-crest"
