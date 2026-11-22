@@ -83,7 +83,7 @@ git.commit = "6d2942b098fe5c7b8db26da9d30d8437b9d7df95"
 
 [turtlemol]
 git.repo = "https://github.com/ghutchis/avogadro-turtlemol.git"
-git.commit = "0b14924d7c7c77536692c6786c0ae31ff64eaaa8"
+git.commit = "905669ce5216e7b29ff060d3de5ad45b8d96b935"
 
 [multicharge]
 git.repo = "https://github.com/ghutchis/avogadro-multicharge.git"
