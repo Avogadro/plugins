@@ -164,7 +164,7 @@ git.commit = "0bb2d569d9c999c0a24f17a9a913f80d4976dd0b"
 
 [stk]
 git.repo = "https://github.com/ghutchis/avogadro-stk"
-git.commit = "ed58a3a4afe5c9d60096a924c5bb4fa1e683fe63"
+git.commit = "5fb37ed57098d3e86781cb65c14bc88f169f14dd"
 
 [cp2k]
 git.repo = "https://github.com/ghutchis/avogadro-cp2k"
