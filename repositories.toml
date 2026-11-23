@@ -194,3 +194,7 @@ git.commit = "8f09cbea37769dce3403c21c1e4be334230a4992"
 git.repo = "https://github.com/ghutchis/avogadro-abinit"
 git.commit = "aca42049cbbabe64c203add8dc3cd53e396ba8c3"
 
+[orb]
+git.repo = "https://github.com/ghutchis/avogadro-orb"
+git.commit = "7907f5efa12eeba92fc2f4dbba41807e82b8f4ef"
+
