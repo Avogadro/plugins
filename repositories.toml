@@ -198,3 +198,6 @@ git.commit = "aca42049cbbabe64c203add8dc3cd53e396ba8c3"
 git.repo = "https://github.com/ghutchis/avogadro-orb"
 git.commit = "7907f5efa12eeba92fc2f4dbba41807e82b8f4ef"
 
+[egret]
+git.repo = "https://github.com/ghutchis/avogadro-egret"
+git.commit = "03554162ff77b042c61678ddbd6bcf0f40b28abb"
