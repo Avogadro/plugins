@@ -206,3 +206,6 @@ git.commit = "03554162ff77b042c61678ddbd6bcf0f40b28abb"
 git.repo = "https://github.com/ghutchis/avogadro-sevennet"
 git.commit = "b2ee4d8eea4c2ce2a6f48280c9635f84bbdc576e"
 
+[so3lr]
+git.repo = "https://github.com/ghutchis/avogadro-so3lr"
+git.commit = "6ace62c204dae89d1edceb4158bd391ca8a9fc79"
